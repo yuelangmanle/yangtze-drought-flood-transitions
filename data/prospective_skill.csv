@@ -1,0 +1,5 @@
+n_triggers_total,n_uncensored_m2,O0_no_wet,O1_mild,O2_moderate,O3_severe,O0_pct,O1_pct,O2_pct,O3_pct,mod_sev_pct,mod_sev_ci95_lo,mod_sev_ci95_hi,lead_median_months,uncond_any_pct,uncond_fw1_pct,region
+47,47,9,18,11,9,19.1,38.3,23.4,19.1,42.6,28.3,57.8,2.0,78.4,49.1,Basin
+48,48,13,10,13,12,27.1,20.8,27.1,25.0,52.1,37.2,66.7,2.0,74.4,49.2,Upper
+49,49,7,15,12,15,14.3,30.6,24.5,30.6,55.1,40.2,69.3,2.0,77.4,49.5,Middle
+46,46,9,15,14,8,19.6,32.6,30.4,17.4,47.8,32.9,63.1,1.0,77.6,48.6,Lower

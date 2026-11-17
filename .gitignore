@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+data/raw/*.nc
+data/raw/*.nc.gz
+data/raw/*.zip
+data/raw/*.xlsx
+!data/raw/README.md
+*.egg-info/
+dist/
+build/

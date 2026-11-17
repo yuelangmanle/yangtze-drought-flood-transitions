@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software or the associated event catalogs, please cite the repository and accompanying study."
+title: "Yangtze River Basin Sequential Drought-to-Flood Transition Analysis"
+type: software
+authors:
+  - family-names: "Deng"
+    given-names: "Zijie"
+    affiliation: "Jiangxi Provincial Key Laboratory of Water Resources Allocation and Efficient Utilization, Jiangxi University of Water Resources and Electric Power"
+license: MIT
+version: "2.0.0"
+date-released: "2026-11-17"
+repository-code: "https://github.com/yuelangmanle/yangtze-drought-flood-transitions"
+url: "https://yuelangmanle.github.io/yangtze-drought-flood-transitions/"
+keywords:
+  - drought-flood abrupt alternation
+  - compound hydroclimatic hazards
+  - Yangtze River Basin
+  - copula independence
+  - moisture flux divergence
+  - Takaya-Nakamura wave flux

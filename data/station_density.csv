@@ -1,0 +1,4 @@
+domain,n_cells,stn_mean,stn_median,stn_min,stn_max,pct_zero_stn
+Whole Basin,748,7.34,8.0,0,8,0.95
+Upper West (<=102E),207,7.28,8.0,0,8,0.89
+Middle-Lower (>108E),335,7.45,8.0,0,8,0.93

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Yangtze River Basin Sequential Drought-to-Flood Transitions (1961–2025)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#top">YRB Drought–Flood Transitions</a>
+      <nav class="nav-links">
+        <a href="#findings">Findings</a>
+        <a href="#catalog">Event Catalog</a>
+        <a href="#figures">Figures</a>
+        <a href="#methodology">Reproducibility</a>
+        <a class="nav-repo" href="https://github.com/yuelangmanle/yangtze-drought-flood-transitions" target="_blank" rel="noopener">GitHub Repository</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero" id="top">
+    <div class="container">
+      <div class="eyebrow">Hydroclimatic Hazards &middot; Yangtze River Basin &middot; 1961–2025</div>
+      <h1>Severity Independence, Tributary Masking, and Synoptic Circulation Signatures of Sequential Drought-to-Flood Transitions</h1>
+      <p class="hero-sub">
+        Reproducible data archive and analysis suite covering 65 years of monthly precipitation (CRU TS v4.10), Datong hydrometric discharge (1961–2024), and multi-reanalysis atmospheric fields (NCEP/NCAR-1 and NCEP-DOE-2) across the Yangtze River Basin and seven major tributaries.
+      </p>
+      <div class="meta-line">
+        <span><strong>Author:</strong> Zijie Deng (Jiangxi University of Water Resources and Electric Power)</span>
+        <span><strong>Coverage:</strong> 1961–2025 &middot; 748 grid cells (0.5&deg; &times; 0.5&deg;)</span>
+        <span><strong>License:</strong> MIT (code) &middot; Derived catalogs (CSV)</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="container">
+    <div class="kpi-grid" id="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-val" id="kpi-events">39 Events</div>
+        <div class="kpi-label">Basin-wide DFAA episodes (1961–2025)</div>
+        <div class="kpi-note">0.60 events yr⁻¹ &middot; 41.0% May–Sep flood season</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-val" id="kpi-tau">&tau; = &minus;0.123</div>
+        <div class="kpi-label">No detectable S<sub>d</sub>–F<sub>w</sub> dependence (p = 0.271)</div>
+        <div class="kpi-note">0/748 cells significant under BH-FDR; MDE |r| = 0.436</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-val" id="kpi-amp">1.82&times; vs. 1.23&times;</div>
+        <div class="kpi-label">Peak tributary amplification ratio</div>
+        <div class="kpi-note">Physical rainfall excess median: 3.26&times; (mm)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-val" id="kpi-circ">&Delta;DI500 = +1.08&sigma;</div>
+        <div class="kpi-label">Mid-tropospheric dipole intensification (p = 0.0001)</div>
+        <div class="kpi-note">Confirmed out-of-sample (p = 0.003) &amp; NCEP-DOE-2</div>
+      </div>
+    </div>
+  </div>
+
+  <section id="findings">
+    <div class="container">
+      <h2>Principal Empirical Results</h2>
+      <p class="sec-lead">
+        All summary statistics below are loaded directly from the verified CSV tables exported by the analysis pipeline.
+      </p>
+      <div class="panel-grid-2">
+        <div class="card">
+          <h3>Copula &amp; Marginal Selection</h3>
+          <p>
+            Across the whole basin (n = 39) and Upper, Middle, and Lower subbasins (n = 39–43), parametric copulas (Gaussian, Frank, Clayton, Gumbel) show |&Delta;AICc| &le; 0.44 relative to the Independence copula on basin scale and remain non-significant across 36 definition schemes and 748 grid cells after Benjamini–Hochberg FDR correction.
+          </p>
+          <div class="table-wrap" style="margin-top:0.8rem">
+            <table id="subregion-table">
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th>Events</th>
+                  <th>&tau; (p-val)</th>
+                  <th>r<sub>s</sub> (p-val)</th>
+                  <th>Best Copula</th>
+                  <th>&Delta;AICc vs Indep</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Circulation &amp; Reanalysis Diagnostics</h3>
+          <p>
+            Sequential transitions coincide with sharp intensification of the Northeast Asia–Plateau mid-tropospheric dipole (DI500) and surface-bounded vertically integrated moisture flux convergence (&minus;&Delta;DIV<sub>ps</sub><sup>*</sup>), verified across matched ordinary wet controls (DI500 p = 0.022), 1993–2025 out-of-sample split, and NCEP-DOE Reanalysis 2.
+          </p>
+          <div class="table-wrap" style="margin-top:0.8rem">
+            <table id="circ-table">
+              <thead>
+                <tr>
+                  <th>Diagnostic</th>
+                  <th>Stratum</th>
+                  <th>n</th>
+                  <th>Dry&rarr;Wet Shift</th>
+                  <th>q<sub>FDR</sub></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="catalog">
+    <div class="container">
+      <h2>Interactive Transition Catalog (1961–2025)</h2>
+      <p class="sec-lead">
+        Filter all 39 basin-wide drought-to-flood abrupt alternation episodes by hydrological season, basin wet severity, tributary localization, and Datong hydrometric discharge response (1961–2024).
+      </p>
+      <div class="controls">
+        <input type="text" id="search-input" placeholder="Search year, month, or tributary (e.g. 2011, Hanjiang)" />
+        <select id="season-filter">
+          <option value="all">All seasons (n = 39)</option>
+          <option value="flood">Flood season: May–Sep (n = 16)</option>
+          <option value="winter">Winter: Dec–Feb (n = 13)</option>
+          <option value="shoulder">Shoulder: Mar–Apr, Oct–Nov (n = 10)</option>
+        </select>
+        <select id="severity-filter">
+          <option value="all">All F_w severities</option>
+          <option value="mild">Mild basin (F_w &lt; 1.0)</option>
+          <option value="modsev">Moderate–Severe basin (F_w &ge; 1.0)</option>
+        </select>
+        <span class="badge-count" id="catalog-count">Showing 39 / 39 events</span>
+      </div>
+      <div class="table-wrap" style="max-height: 430px; overflow-y: auto;">
+        <table id="catalog-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Dry Spell</th>
+              <th>Wet Spell</th>
+              <th>Season</th>
+              <th>S<sub>d</sub></th>
+              <th>F<sub>w</sub> (Basin)</th>
+              <th>Peak Tributary (F<sub>w</sub>)</th>
+              <th>Ratio</th>
+              <th>Precip Excess (mm)</th>
+              <th>Datong Q<sub>wet</sub></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="figures">
+    <div class="container">
+      <h2>Publication Figure Explorer</h2>
+      <p class="sec-lead">
+        Inspect high-resolution diagnostic figures rendered by the repository scripts.
+      </p>
+      <div class="fig-tabs" id="fig-tabs">
+        <button class="fig-tab active" data-fig="Fig1">Fig. 1 Basin &amp; Regime</button>
+        <button class="fig-tab" data-fig="Fig2">Fig. 2 Tributary Masking</button>
+        <button class="fig-tab" data-fig="Fig3">Fig. 3 Chronology &amp; Seasons</button>
+        <button class="fig-tab" data-fig="Fig4">Fig. 4 Copula &amp; Grid &tau;</button>
+        <button class="fig-tab" data-fig="Fig5">Fig. 5 Sensitivity &amp; Datong</button>
+        <button class="fig-tab" data-fig="Fig6">Fig. 6 Synoptic Circulation</button>
+        <button class="fig-tab" data-fig="ESM_Fig1">Fig. S1 Wave Flux (200 hPa)</button>
+      </div>
+      <div class="fig-stage">
+        <img id="fig-img" src="assets/figures/Fig1.png" alt="Diagnostic figure" />
+        <p class="fig-caption" id="fig-caption"></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="methodology">
+    <div class="container">
+      <h2>Code Architecture &amp; Verification</h2>
+      <div class="panel-grid-2">
+        <div class="card">
+          <h3>Reproducing Analysis &amp; Figures</h3>
+          <pre class="code-box">git clone https://github.com/yuelangmanle/yangtze-drought-flood-transitions.git
+cd yangtze-drought-flood-transitions
+pip install -r requirements.txt
+
+# Verify summaries and regenerate Fig. 2–5 from included CSVs
+python3 run_pipeline.py --derived-only
+
+# Full end-to-end execution from local raw datasets
+python3 scripts/fetch_public_data.py --raw-dir /path/to/raw
+python3 run_pipeline.py --raw-dir /path/to/raw --mask data/yangtze_mask.npz</pre>
+        </div>
+        <div class="card">
+          <h3>Citation</h3>
+          <pre class="code-box" id="bibtex-block">@misc{deng2026yangtze_dfaa,
+  author       = {Deng, Zijie},
+  title        = {Yangtze River Basin Sequential Drought-to-Flood Transition Analysis (v2.0.0)},
+  year         = {2026},
+  howpublished = {GitHub Repository},
+  url          = {https://github.com/yuelangmanle/yangtze-drought-flood-transitions}
+}</pre>
+          <button class="btn-copy" id="copy-bib">Copy BibTeX</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-inner">
+      <span>Yangtze River Basin Drought–Flood Transition Dataset &amp; Software</span>
+      <span><a href="https://github.com/yuelangmanle/yangtze-drought-flood-transitions" style="color: var(--navy);">github.com/yuelangmanle/yangtze-drought-flood-transitions</a></span>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

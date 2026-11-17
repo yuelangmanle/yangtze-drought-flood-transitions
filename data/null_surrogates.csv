@@ -1,0 +1,4 @@
+surrogate,n_boot,obs_count,null_count_mean,null_count_p05,null_count_p95,count_p_value,obs_tau,null_tau_mean,null_tau_p05,null_tau_p95,null_m2_fw1_mean,null_m2_fw1_p05,null_m2_fw1_p95,lag1_rho_min,lag1_rho_max,lag1_rho_mean
+iid_gaussian,1000,39,41.84,33,51,0.6593,-0.1228,-0.0018,-0.175,0.1686,0.5144,0.4,0.628,-0.172,0.165,0.042
+seasonal_ar1,1000,39,42.64,34,52,0.5115,-0.1228,0.0021,-0.174,0.186,0.5021,0.3902,0.6154,-0.172,0.165,0.042
+year_block_shuffle,1000,39,39.36,36,42,1.0,-0.1228,-0.0632,-0.1745,0.0472,0.4435,0.3828,0.5005,-0.172,0.165,0.042
