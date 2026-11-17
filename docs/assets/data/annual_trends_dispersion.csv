@@ -1,2 +1,2 @@
 n_years,count_mean,count_var,dispersion,chi2_stat,chi2_df,dispersion_p_two_sided,poisson_slope_per_yr,poisson_p,quasipoisson_scale,quasipoisson_slope,quasipoisson_se,quasipoisson_z,quasipoisson_p,mk_count_Z,mk_count_p,mk_Sd_Z,mk_Sd_p,mk_Fw_Z,mk_Fw_p
-65,0.6,0.4312,0.7188,46.0,64,0.0872,-0.00768,0.3712,0.7506,-0.00768,0.00744,-1.032,0.302,-1.441,0.1495,-1.161,0.2455,-0.823,0.4107
+65,0.6,0.4312,0.7188,46.0,64,0.0872,-0.00768,0.3712,0.7506,-0.00768,0.00744,-1.032,0.302,-1.441,0.1495,-1.016,0.3096,-0.774,0.4388

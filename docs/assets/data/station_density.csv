@@ -1,4 +1,13 @@
-domain,n_cells,stn_mean,stn_median,stn_min,stn_max,pct_zero_stn
-Whole Basin,748,7.34,8.0,0,8,0.95
-Upper West (<=102E),207,7.28,8.0,0,8,0.89
-Middle-Lower (>108E),335,7.45,8.0,0,8,0.93
+period,domain,n_cells,stn_mean,stn_median,stn_min,stn_max,pct_zero_stn
+1961-2025 (Full),Whole Basin,748,7.34,8.0,0,8,0.95
+1961-2025 (Full),Upper West (<=102E),207,7.28,8.0,0,8,0.89
+1961-2025 (Full),"Upper East (>102E, upper)",215,7.25,8.0,0,8,1.03
+1961-2025 (Full),Middle-Lower (>108E),335,7.45,8.0,0,8,0.93
+1961-2019 (Historical),Whole Basin,748,7.66,8.0,0,8,0.01
+1961-2019 (Historical),Upper West (<=102E),207,7.62,8.0,0,8,0.03
+1961-2019 (Historical),"Upper East (>102E, upper)",215,7.61,8.0,1,8,0.0
+1961-2019 (Historical),Middle-Lower (>108E),335,7.73,8.0,1,8,0.0
+2020-2025 (Recent),Whole Basin,748,4.2,5.0,0,8,10.16
+2020-2025 (Recent),Upper West (<=102E),207,3.9,4.0,0,7,9.34
+2020-2025 (Recent),"Upper East (>102E, upper)",215,3.72,4.0,0,8,11.11
+2020-2025 (Recent),Middle-Lower (>108E),335,4.72,5.0,0,8,10.08

@@ -3,7 +3,7 @@
 from pathlib import Path
 import numpy as np
 import shapefile
-from shapely.geometry import Point, shape
+from shapely.geometry import Point, box, shape
 from shapely.ops import unary_union
 
 
@@ -36,30 +36,36 @@ def load_basin_mask(mask_path):
     }
 
 
-def area_weighted_series(field, frac, zone=None, zone_id=0):
-    """Compute area-weighted mean time series for the basin (0) or subbasin."""
-    if zone_id == 0 or zone is None:
-        weights = frac.copy()
-    else:
-        weights = np.where(zone == zone_id, frac, 0.0)
-    total = np.nansum(weights)
+def _grid_weights(frac, zone=None, zone_id=0, lats=None):
+    """Combine polygon area fractions with optional subbasin filtering and latitude cosine weighting."""
+    w = frac.copy() if (zone_id == 0 or zone is None) else np.where(zone == zone_id, frac, 0.0)
+    if lats is not None:
+        w = w * np.cos(np.deg2rad(lats))[:, None]
+    total = np.nansum(w)
     if total <= 0:
         raise ValueError(f"Zero mask weight for zone_id={zone_id}")
-    weights = weights / total
+    return w / total
+
+
+def area_weighted_series(field, frac, zone=None, zone_id=0, lats=None):
+    """Compute area-weighted mean time series for the basin (0) or subbasin."""
+    weights = _grid_weights(frac, zone=zone, zone_id=zone_id, lats=lats)
     return np.nansum(field * weights[None, :, :], axis=(1, 2))
 
 
 def build_tributary_masks(hybas_l6_prefix, lats, lons, frac):
-    """Trace HydroBASINS Level-6 upstream catchments for the seven major tributaries."""
+    """Build fractional and latitude-cosine-weighted HydroBASINS Level-6 tributary masks and areas."""
     sf = shapefile.Reader(str(hybas_l6_prefix))
     fields = [f[0] for f in sf.fields[1:]]
     i_id = fields.index("HYBAS_ID")
     i_down = fields.index("NEXT_DOWN")
+    i_sub = fields.index("SUB_AREA")
     recs = sf.records()
     shapes = sf.shapes()
 
     ids = np.array([r[i_id] for r in recs])
     downs = np.array([r[i_down] for r in recs])
+    sub_areas = np.array([float(r[i_sub]) for r in recs])
 
     candidates = {
         idx: shape(shp.__geo_interface__)
@@ -71,6 +77,8 @@ def build_tributary_masks(hybas_l6_prefix, lats, lons, frac):
     }
 
     trib_sets = {}
+    trib_areas_km2 = {}
+    trib_geoms = {}
     for name, (lon0, lat0) in TRIBUTARY_OUTLETS.items():
         pt = Point(lon0, lat0)
         outlet = next(i for i, poly in candidates.items() if poly.contains(pt))
@@ -81,30 +89,43 @@ def build_tributary_masks(hybas_l6_prefix, lats, lons, frac):
                 break
             basin_ids.update(ids[upstream].tolist())
         trib_sets[name] = basin_ids
+        in_set = np.isin(ids, list(basin_ids))
+        trib_areas_km2[name] = round(float(sub_areas[in_set].sum()), 1)
+        trib_geoms[name] = unary_union([
+            poly for i, poly in candidates.items() if recs[i][i_id] in basin_ids
+        ])
 
-    all_ids = set().union(*trib_sets.values())
-    polys = [
-        (recs[i][i_id], poly)
-        for i, poly in candidates.items()
-        if recs[i][i_id] in all_ids
-    ]
-
+    dlat = float(abs(lats[1] - lats[0])) if len(lats) > 1 else 0.5
+    dlon = float(abs(lons[1] - lons[0])) if len(lons) > 1 else 0.5
     trib_names = list(TRIBUTARY_OUTLETS.keys())
-    zid = np.full(frac.shape, -1, dtype=int)
+    raw_weights = {name: np.zeros(frac.shape, dtype=float) for name in trib_names}
+
     for iy, ix in np.argwhere(frac > 0):
-        cell = Point(lons[ix], lats[iy]).buffer(0.01)
-        hits = {hid for hid, poly in polys if poly.intersects(cell)}
-        for k, name in enumerate(trib_names):
-            if hits & trib_sets[name]:
-                zid[iy, ix] = k
-                break
+        cell_box = box(
+            lons[ix] - 0.5 * dlon,
+            lats[iy] - 0.5 * dlat,
+            lons[ix] + 0.5 * dlon,
+            lats[iy] + 0.5 * dlat,
+        )
+        c_area = cell_box.area
+        cos_w = float(np.cos(np.deg2rad(lats[iy])))
+        for name in trib_names:
+            geom = trib_geoms[name]
+            if not geom.intersects(cell_box):
+                continue
+            ov = cell_box.intersection(geom).area / c_area
+            if ov > 1e-4:
+                raw_weights[name][iy, ix] = ov * cos_w
+
+    stack = np.stack([raw_weights[nm] for nm in trib_names], axis=0)
+    max_ov = np.max(stack, axis=0)
+    zid = np.where(max_ov > 0.0, np.argmax(stack, axis=0), -1)
 
     masks = {}
-    for k, name in enumerate(trib_names):
-        sel = zid == k
-        w = np.where(sel, 1.0, 0.0)
+    for name in trib_names:
+        w = raw_weights[name]
         masks[name] = w / w.sum()
-    return masks, zid, trib_names
+    return masks, zid, trib_names, trib_areas_km2
 
 
 def load_coastlines(geojson_path):

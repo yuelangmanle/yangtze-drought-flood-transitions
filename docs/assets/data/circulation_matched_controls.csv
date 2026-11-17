@@ -1,9 +1,17 @@
-n,mean_diff,ci95_lo,ci95_hi,loo_min,loo_max,p_value,index,stratum
-35,-0.1193,-0.4537,0.215,-0.17,-0.0512,0.4908,DIV_ps,All matched
-15,-0.2151,-0.777,0.3468,-0.3449,-0.1131,0.4599,DIV_ps,Flood matched
-35,0.4023,0.0708,0.7337,0.3352,0.4619,0.0219,DI500,All matched
-15,0.5299,0.0465,1.0132,0.4241,0.6589,0.0531,DI500,Flood matched
-35,0.3683,0.041,0.6956,0.3018,0.4356,0.0357,DI200,All matched
-15,0.434,0.0451,0.8228,0.3414,0.522,0.0487,DI200,Flood matched
-35,-0.577,-0.9791,-0.175,-0.6404,-0.4996,0.011,EAP850,All matched
-15,-0.8094,-1.5034,-0.1155,-0.9799,-0.638,0.0362,EAP850,Flood matched
+n,mean_diff,ci95_lo,ci95_hi,loo_min,loo_max,p_value,scheme,index,stratum,contrast,pool_perm_p,q_FDR
+33,-0.1828,-0.544,0.1784,-0.2282,-0.114,0.3037,tol_0.1,DIV_ps,All matched,DIV_ps(t_w0) minus matched wet,0.3297,0.3471
+14,-0.1717,-0.8248,0.4814,-0.2827,-0.0136,0.5803,tol_0.1,DIV_ps,Flood matched,DIV_ps(t_w0) minus matched wet,0.558,0.5803
+33,0.4638,0.0959,0.8317,0.3967,0.5251,0.0149,tol_0.1,DI500,All matched,DI500(t_w0) minus matched wet,0.0299,0.0346
+14,0.5927,-0.0558,1.2411,0.4373,0.7533,0.07,tol_0.1,DI500,Flood matched,DI500(t_w0) minus matched wet,0.0676,0.0933
+33,0.3876,0.0568,0.7183,0.3234,0.452,0.0216,tol_0.1,DI200,All matched,DI200(t_w0) minus matched wet,0.0586,0.0346
+14,0.5932,0.1021,1.0843,0.4692,0.6922,0.0201,tol_0.1,DI200,Flood matched,DI200(t_w0) minus matched wet,0.0572,0.0346
+33,-0.6783,-1.1276,-0.2289,-0.7441,-0.5993,0.005,tol_0.1,EAP850,All matched,EAP850(t_w0) minus matched wet,0.0007,0.0346
+14,-0.9808,-1.7461,-0.2154,-1.1432,-0.8096,0.0192,tol_0.1,EAP850,Flood matched,EAP850(t_w0) minus matched wet,0.0029,0.0346
+39,-0.0675,-0.3614,0.2264,-0.1081,-0.0065,0.6401,tol_0.2_nn_all39,DIV_ps,All matched,DIV_ps(t_w0) minus matched wet,0.6681,0.6401
+16,-0.1208,-0.5957,0.3541,-0.2102,-0.0085,0.5971,tol_0.2_nn_all39,DIV_ps,Flood matched,DIV_ps(t_w0) minus matched wet,0.5344,0.6401
+39,0.3769,0.0855,0.6684,0.319,0.4282,0.0112,tol_0.2_nn_all39,DI500,All matched,DI500(t_w0) minus matched wet,0.0244,0.027
+16,0.7482,0.3629,1.1335,0.6741,0.8238,0.001,tol_0.2_nn_all39,DI500,Flood matched,DI500(t_w0) minus matched wet,0.0031,0.008
+39,0.3742,0.0834,0.6651,0.3236,0.4294,0.0136,tol_0.2_nn_all39,DI200,All matched,DI200(t_w0) minus matched wet,0.0293,0.027
+16,0.7559,0.3236,1.1883,0.6532,0.859,0.0022,tol_0.2_nn_all39,DI200,Flood matched,DI200(t_w0) minus matched wet,0.0072,0.0088
+39,-0.5261,-0.9484,-0.1038,-0.595,-0.477,0.0169,tol_0.2_nn_all39,EAP850,All matched,EAP850(t_w0) minus matched wet,0.0019,0.027
+16,-0.7588,-1.4292,-0.0885,-0.908,-0.6577,0.0322,tol_0.2_nn_all39,EAP850,Flood matched,EAP850(t_w0) minus matched wet,0.003,0.0429

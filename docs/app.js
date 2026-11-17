@@ -1,19 +1,43 @@
 const FIGURE_CAPTIONS = {
-  Fig1: "Figure 1. Yangtze River Basin subregions (Upper, Middle, and Lower catchments), seven primary tributaries, key hydrometric infrastructure (Three Gorges Dam at Yichang; Datong mainstem gauge), and 1961–2025 monthly precipitation regime highlighting May–Sep flood-season onset prevalence (41.0%).",
-  Fig2: "Figure 2. Comparison of basin-mean F_w versus peak tributary F_w across 39 events. Mild whole-basin wet recoveries (F_w < 1.0) exhibit a median tributary amplification of 1.82x compared to 1.23x for events with F_w >= 1.0, accompanied by a median 3.26x physical precipitation excess (mm) at the tributary scale.",
-  Fig3: "Figure 3. (a) Complete 1961–2025 chronology of basin-wide drought-to-flood abrupt alternations showing preceding drought severity (-S_d) and subsequent wet severity (+F_w) alongside the 2003 Three Gorges impoundment and 2013 cascade commissioning markers. (b) Monthly transition onset distribution.",
-  Fig4: "Figure 4. (a) Absence of statistically detectable monotonic scaling between S_d and F_w at whole-basin scale (n = 39, tau = -0.123, p = 0.271; 80%-power MDE |r| = 0.436; copula |DeltaAICc| <= 0.44). (b) Grid-cell Kendall tau across 748 CRU cells (median +0.008; 0/748 significant under BH-FDR q < 0.05).",
-  Fig5: "Figure 5. (a) Sensitivity matrix across 36 definition schemes (2/36 nominal p < 0.05), multi-scale indices (SPI-1, SPI-3, SPEI-1, SPEI-3), and 1-month weak-break bridging. (b) Datong mainstem wet-spell discharge anomalies stratified by basin F_w and reservoir eras (1961–2024).",
-  Fig6: "Figure 6. (a) Composite 500 hPa geopotential anomalies (shading), surface-bounded moisture transport vectors (Q'), and 5880 gpm contour for May–Sep flood transitions (n = 16) vs. May–Sep climatology. (b) All-season composite (n = 39). (c–d) Window trajectories [t_0-3 .. t_0+1] for DIV_ps* and DI500.",
-  ESM_Fig1: "Figure S1. 200 hPa geopotential height anomalies (shading), May–Sep 25 and 30 m/s upper-tropospheric jet core contours (purple), and horizontal Takaya–Nakamura (2001) wave-activity flux vectors W across East Asia during May–Sep flood-season transitions (n = 16)."
+  Fig1: "Figure 1. Yangtze River Basin subregions (Upper, Middle, and Lower catchments), seven fractional HydroBASINS Level-6 tributaries, hydrometric infrastructure (Three Gorges Dam at Yichang; Datong mainstem gauge), and 1961–2025 monthly precipitation medians & IQRs paired with median temperature highlighting May–Sep flood-season onset prevalence (41.0%, n = 16).",
+  Fig2: "Figure 2. Comparison of basin-mean F_w versus synchronous peak tributary F_w across 39 events coded by severity and season. Mild whole-basin wet recoveries (F_w < 1.0) exhibit a median tributary SPI amplification of 1.84x vs. 1.24x for F_w >= 1.0 (MW p = 1.8e-4), uncoupled level r_s = +0.689 (p = 1.0e-6), and a 3.29x median physical rainfall excess ratio (14.23 km^3).",
+  Fig3: "Figure 3. (a) Complete 1961–2025 chronology of basin-wide SPI-1 transitions showing 11-yr centered transition rates alongside preceding drought (-S_d) and subsequent wet (+F_w) severities (maximum jump J_w = 3.02 in 1989-01). (b) Monthly transition onset distribution across Flood (41.0%), Winter (33.3%), and Shoulder (25.6%).",
+  Fig4: "Figure 4. (a) Absence of statistically detectable S_d vs. F_w scaling at whole-basin scale (n = 39, tau = -0.139, p = 0.213; 80%-power MDE |tau| = 0.313, |r| = 0.436; Gamma best marginals; Q50/Q90 slopes non-significant). (b) Grid-cell Kendall tau across 748 CRU cells (median +0.008; 47/748 nominal p < 0.05 vs. seasonal AR(1) field null P95 = 7.5%, field p = 0.183; 0/748 BH-FDR q < 0.05).",
+  Fig5: "Figure 5. (a) Sensitivity matrix across 36 definition schemes and forest-plot comparison across SPI-1, SPI-3, Penman–Monteith and Thornthwaite SPEI-1/3, and 1-month bridging with per-sample Kendall tau 80%-MDE bands. (b) Datong mainstem wet-spell discharge anomalies stratified by basin F_w, season (filled Flood vs. open Cool), and regulation eras (1961–2024).",
+  Fig6: "Figure 6. (a) Detrended 500 hPa geopotential height anomalies (Z_500, stippling p < 0.05), p_s-bounded moisture transport vectors (Q'), and detrended month-matched 5880 gpm WNPSH edges (135.0 deg E climatology vs. 132.5 deg E transitions) for May–Sep flood transitions (n = 16). (b) All-event composite (n = 39). (c–d) Window trajectories [t_w0-3 .. t_w0+1] for DIV_ps and DI500 with separate n = 16 and n = 39 climatological 5–95% bands.",
+  ESM_Fig1: "Figure S1. 200 hPa geopotential height anomalies (shading), month-matched May–Sep 25 and 30 m/s upper-tropospheric jet core contours (purple), and horizontal Takaya–Nakamura (2001) wave-activity flux vectors W (|W| >= 0.08 m^2 s^-2 north of 20 deg N; reference 1.0 m^2 s^-2) across East Asia during May–Sep flood transitions (n = 16)."
 };
+
+function parseCSVLine(line) {
+  const out = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === "," && !inQuotes) {
+      out.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
 
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
-  const headers = lines[0].split(",");
+  const headers = parseCSVLine(lines[0]);
   return lines.slice(1).map((line) => {
-    const cols = line.split(",");
+    const cols = parseCSVLine(line);
     const obj = {};
     headers.forEach((h, i) => {
       obj[h] = cols[i] ?? "";
@@ -56,16 +80,17 @@ async function initPortal() {
   const subTbody = document.querySelector("#subregion-table tbody");
   subTbody.innerHTML = "";
   subregions.forEach((s) => {
-    const regCop = copulas.filter((c) => c.region === s.region && c.copula !== "Independence");
+    const regCop = copulas.filter((c) => c.region === s.region);
     regCop.sort((a, b) => Number(a.AICc) - Number(b.AICc));
-    const best = regCop[0] || { copula: "—", delta_AICc_vs_Indep: "0.00" };
+    const best = regCop[0] || { copula: "—", delta_AICc_vs_Indep: "0.00", CvM_p: "" };
     const tr = document.createElement("tr");
+    const bestLbl = best.CvM_p ? `${best.copula} (CvM p=${Number(best.CvM_p).toFixed(3)})` : best.copula;
     tr.innerHTML = `
       <td><strong>${s.region}</strong></td>
       <td>${s.n}</td>
       <td>${Number(s.kendall_tau).toFixed(3)} (${Number(s.kendall_p).toFixed(3)})</td>
       <td>${Number(s.spearman_r).toFixed(3)} (${Number(s.spearman_p).toFixed(3)})</td>
-      <td>${best.copula}</td>
+      <td>${bestLbl}</td>
       <td>${Number(best.delta_AICc_vs_Indep).toFixed(2)}</td>
     `;
     subTbody.appendChild(tr);

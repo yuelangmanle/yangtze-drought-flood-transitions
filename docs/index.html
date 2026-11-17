@@ -23,9 +23,9 @@
   <section class="hero" id="top">
     <div class="container">
       <div class="eyebrow">Hydroclimatic Hazards &middot; Yangtze River Basin &middot; 1961–2025</div>
-      <h1>Severity Independence, Tributary Masking, and Synoptic Circulation Signatures of Sequential Drought-to-Flood Transitions</h1>
+      <h1>Severity Independence Within Statistical Power Bounds, Tributary Masking, and Synoptic Circulation Signatures of Drought-to-Flood Transitions</h1>
       <p class="hero-sub">
-        Reproducible data archive and analysis suite covering 65 years of monthly precipitation (CRU TS v4.10), Datong hydrometric discharge (1961–2024), and multi-reanalysis atmospheric fields (NCEP/NCAR-1 and NCEP-DOE-2) across the Yangtze River Basin and seven major tributaries.
+        Reproducible data archive and analysis suite covering 65 years of CRU TS v4.10 precipitation, temperature, and Penman–Monteith PET grids, GPCC Monthly v2025 benchmark validation, Datong hydrometric discharge (1961–2024), and multi-reanalysis atmospheric fields (NCEP/NCAR-1 and NCEP-DOE-2) across the Yangtze River Basin and seven major tributaries.
       </p>
       <div class="meta-line">
         <span><strong>Author:</strong> Zijie Deng (Jiangxi University of Water Resources and Electric Power)</span>
@@ -40,22 +40,22 @@
       <div class="kpi-card">
         <div class="kpi-val" id="kpi-events">39 Events</div>
         <div class="kpi-label">Basin-wide DFAA episodes (1961–2025)</div>
-        <div class="kpi-note">0.60 events yr⁻¹ &middot; 41.0% May–Sep flood season</div>
+        <div class="kpi-note">0.60 events yr⁻¹ &middot; 16 May–Sep flood (41.0%) vs. 23 cool (59.0%)</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-val" id="kpi-tau">&tau; = &minus;0.123</div>
-        <div class="kpi-label">No detectable S<sub>d</sub>–F<sub>w</sub> dependence (p = 0.271)</div>
-        <div class="kpi-note">0/748 cells significant under BH-FDR; MDE |r| = 0.436</div>
+        <div class="kpi-val" id="kpi-tau">&tau; = &minus;0.139</div>
+        <div class="kpi-label">No detectable S<sub>d</sub>–F<sub>w</sub> dependence (p = 0.213)</div>
+        <div class="kpi-note">0/748 BH-FDR (field p = 0.183) &middot; MDE |&tau;| = 0.313 (|r| = 0.436)</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-val" id="kpi-amp">1.82&times; vs. 1.23&times;</div>
+        <div class="kpi-val" id="kpi-amp">1.84&times; vs. 1.24&times;</div>
         <div class="kpi-label">Peak tributary amplification ratio</div>
-        <div class="kpi-note">Physical rainfall excess median: 3.26&times; (mm)</div>
+        <div class="kpi-note">Physical rainfall excess median: 3.29&times; (14.23 km&sup3;)</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-val" id="kpi-circ">&Delta;DI500 = +1.08&sigma;</div>
-        <div class="kpi-label">Mid-tropospheric dipole intensification (p = 0.0001)</div>
-        <div class="kpi-note">Confirmed out-of-sample (p = 0.003) &amp; NCEP-DOE-2</div>
+        <div class="kpi-val" id="kpi-circ">&Delta;DI500 = +1.18&sigma;</div>
+        <div class="kpi-label">Mid-tropospheric dipole &amp; DIV<sub>ps</sub> (−1.10 mm/d, p = 0.0001)</div>
+        <div class="kpi-note">Exceeds wet controls (p = 0.015) &middot; NCEP-DOE-2 confirmed</div>
       </div>
     </div>
   </div>
@@ -70,7 +70,7 @@
         <div class="card">
           <h3>Copula &amp; Marginal Selection</h3>
           <p>
-            Across the whole basin (n = 39) and Upper, Middle, and Lower subbasins (n = 39–43), parametric copulas (Gaussian, Frank, Clayton, Gumbel) show |&Delta;AICc| &le; 0.44 relative to the Independence copula on basin scale and remain non-significant across 36 definition schemes and 748 grid cells after Benjamini–Hochberg FDR correction.
+            Across Upper, Middle, and Lower subbasins (n = 39–43), nine parametric copulas (including 90&deg;/270&deg; rotated tail models) fall within |&Delta;AICc| &lt; 2 relative to Independence. At whole-basin scale (n = 39), 90&deg;-rotated Gumbel lowers AICc by &minus;2.37 due to isolated severe droughts yet fails Cram&eacute;r–von Mises goodness-of-fit (p = 0.017) whereas Independence passes (p = 0.544), with 0/748 grid cells significant after BH-FDR (seasonal AR(1) field p = 0.183).
           </p>
           <div class="table-wrap" style="margin-top:0.8rem">
             <table id="subregion-table">
@@ -92,7 +92,7 @@
         <div class="card">
           <h3>Circulation &amp; Reanalysis Diagnostics</h3>
           <p>
-            Sequential transitions coincide with sharp intensification of the Northeast Asia–Plateau mid-tropospheric dipole (DI500) and surface-bounded vertically integrated moisture flux convergence (&minus;&Delta;DIV<sub>ps</sub><sup>*</sup>), verified across matched ordinary wet controls (DI500 p = 0.022), 1993–2025 out-of-sample split, and NCEP-DOE Reanalysis 2.
+            Sequential transitions coincide with sharp intensification of the Northeast Asia–Plateau mid- and upper-tropospheric dipole (DI500, DI200) and surface-bounded vertically integrated moisture flux convergence (&minus;&Delta;DIV<sub>ps</sub> = &minus;1.10 mm day⁻¹), exceeding matched ordinary wet controls (DI500 +0.464&sigma;, p = 0.015; DI200 +0.388&sigma;, p = 0.022; EAP850 &minus;0.678&sigma;, p = 0.005) and replicating in NCEP-DOE-2 DIV<sub>ps</sub> (p = 0.0001).
           </p>
           <div class="table-wrap" style="margin-top:0.8rem">
             <table id="circ-table">
@@ -188,7 +188,7 @@
 cd yangtze-drought-flood-transitions
 pip install -r requirements.txt
 
-# Verify summaries and regenerate Fig. 2–5 from included CSVs
+# Verify derived figures (Fig. 1–6 & ESM_Fig1) from included CSVs
 python3 run_pipeline.py --derived-only
 
 # Full end-to-end execution from local raw datasets

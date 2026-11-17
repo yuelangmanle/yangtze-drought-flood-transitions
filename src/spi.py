@@ -7,7 +7,7 @@ from scipy.special import gamma as gamma_fn
 
 
 def fit_spi(series, months, scale=1):
-    """Mixed-Gamma Standardized Precipitation Index (Thom 1966; McKee et al. 1993)."""
+    """Mixed-Gamma Standardized Precipitation Index (Thom 1966; McKee et al. 1993; Stagge et al. 2015)."""
     vals = pd.Series(series, dtype=float).rolling(scale).sum().to_numpy()
     out = np.full(len(vals), np.nan, dtype=float)
     for mo in range(1, 13):
@@ -28,7 +28,8 @@ def fit_spi(series, months, scale=1):
         else:
             cdf[pos_mask] = 0.5
         if n_zero > 0:
-            cdf[~pos_mask] = (n_zero + 1.0) / (2.0 * (n_ok + 1.0))
+            # Stagge et al. (2015) probability-mass midpoint inside [0, q0]
+            cdf[~pos_mask] = 0.5 * q0
 
         out[idx] = stats.norm.ppf(np.clip(cdf, 1e-6, 1.0 - 1e-6))
     return out
@@ -100,8 +101,16 @@ def fit_spei(water_balance, months, scale=1):
     return out
 
 
-def detect_transitions(spi, periods=None, dry_th=-0.5, wet_th=0.5, min_dry=2, max_gap=4):
-    """Run-theory identification of drought-to-flood abrupt alternation (DFAA) events."""
+def _season_label(mo):
+    if 5 <= mo <= 9:
+        return "Flood (May-Sep)"
+    if mo in (12, 1, 2):
+        return "Winter (Dec-Feb)"
+    return "Shoulder (Mar-Apr, Oct-Nov)"
+
+
+def detect_transitions(spi, periods=None, dry_th=-0.5, wet_th=0.5, min_dry=2, max_gap=4, min_fw=0.0):
+    """Run-theory identification of sequential drought-to-wet transition events."""
     events = []
     dry_spells = []
     n = len(spi)
@@ -119,12 +128,14 @@ def detect_transitions(spi, periods=None, dry_th=-0.5, wet_th=0.5, min_dry=2, ma
                     j2 = k
                     while j2 < n and np.isfinite(spi[j2]) and spi[j2] >= wet_th:
                         j2 += 1
-                    sd_val = float(-spi[s0 : s1 + 1].sum())
                     fw_val = float(spi[k:j2].sum())
+                    if fw_val < min_fw:
+                        break
+                    sd_val = float(-spi[s0 : s1 + 1].sum())
                     d_len = s1 - s0 + 1
                     w_len = j2 - k
                     gap_len = k - s1
-                    i_w = (fw_val / w_len) - (spi[s0 : s1 + 1].mean())
+                    j_w = (fw_val / w_len) - (spi[s0 : s1 + 1].mean())
                     rec = {
                         "s0": s0,
                         "s1": s1,
@@ -135,7 +146,7 @@ def detect_transitions(spi, periods=None, dry_th=-0.5, wet_th=0.5, min_dry=2, ma
                         "gap": gap_len,
                         "S_d": round(sd_val, 4),
                         "F_w": round(fw_val, 4),
-                        "I_w": round(float(i_w), 4),
+                        "J_w": round(float(j_w), 4),
                     }
                     if periods is not None:
                         p_k = periods[k]
@@ -145,6 +156,7 @@ def detect_transitions(spi, periods=None, dry_th=-0.5, wet_th=0.5, min_dry=2, ma
                         rec["wet_end"] = str(periods[j2 - 1])
                         rec["year"] = int(p_k.year)
                         rec["trans_month"] = int(p_k.month)
+                        rec["season"] = _season_label(int(p_k.month))
                     events.append(rec)
                     break
                 k += 1
@@ -190,46 +202,66 @@ def detect_with_bridge(spi, dry_th=-0.5, wet_th=0.5, min_dry=2, max_gap=4):
 
 
 def threshold_sensitivity_matrix(spi):
-    """Evaluate all 36 threshold/duration/gap combinations."""
+    """Evaluate 36 core threshold/duration/gap combinations plus G=1 and F_w>=1.0 extensions."""
     rows = []
-    for dry_th in (-0.4, -0.5, -0.6):
-        for wet_th in (0.4, 0.5, 0.6):
-            for min_dry in (1, 2):
-                for max_gap in (3, 4):
-                    evs, _ = detect_transitions(spi, None, dry_th, wet_th, min_dry, max_gap)
-                    if len(evs) < 5:
-                        continue
-                    sd = [e["S_d"] for e in evs]
-                    fw = [e["F_w"] for e in evs]
-                    tau, p_val = stats.kendalltau(sd, fw)
-                    rows.append({
-                        "dry_th": dry_th,
-                        "wet_th": wet_th,
-                        "min_dry": min_dry,
-                        "max_gap": max_gap,
-                        "n_events": len(evs),
-                        "tau": round(float(tau), 4),
-                        "p_value": round(float(p_val), 4),
-                    })
+    configs = [
+        (dry_th, wet_th, min_dry, max_gap, 0.0, "core_36")
+        for dry_th in (-0.4, -0.5, -0.6)
+        for wet_th in (0.4, 0.5, 0.6)
+        for min_dry in (1, 2)
+        for max_gap in (3, 4)
+    ]
+    # Add G=1 immediate-transition and F_w>=1.0 moderate-to-severe rules
+    configs.extend([
+        (-0.5, 0.5, 2, 1, 0.0, "gap1_immediate"),
+        (-0.5, 0.5, 1, 1, 0.0, "gap1_immediate"),
+        (-0.5, 0.5, 2, 4, 1.0, "fw1_threshold"),
+        (-0.5, 0.5, 2, 1, 1.0, "gap1_fw1"),
+    ])
+    for dry_th, wet_th, min_dry, max_gap, min_fw, rule_grp in configs:
+        evs, _ = detect_transitions(spi, None, dry_th, wet_th, min_dry, max_gap, min_fw=min_fw)
+        if len(evs) < 5:
+            continue
+        sd = [e["S_d"] for e in evs]
+        fw = [e["F_w"] for e in evs]
+        tau, p_val = stats.kendalltau(sd, fw)
+        rows.append({
+            "dry_th": dry_th,
+            "wet_th": wet_th,
+            "min_dry": min_dry,
+            "max_gap": max_gap,
+            "min_fw": min_fw,
+            "rule_group": rule_grp,
+            "n_events": len(evs),
+            "tau": round(float(tau), 4),
+            "p_value": round(float(p_val), 4),
+        })
     return pd.DataFrame(rows)
 
 
-def run_null_surrogates(spi, months, years, n_boot=1000, seed=2026):
-    """Compare observed transition statistics against white-noise, Markov AR(1), and calendar-block shuffles."""
+def run_null_surrogates(spi, months, years, n_boot=1000, seed=2026, region="Basin"):
+    """Compare observed transitions against Gaussian white-noise, seasonal AR(1)/AR(2), and block shuffles."""
     rng = np.random.default_rng(seed)
     obs_events, _ = detect_transitions(spi)
     obs_count = len(obs_events)
     obs_tau = float(stats.kendalltau([e["S_d"] for e in obs_events], [e["F_w"] for e in obs_events]).statistic)
 
-    # Monthly lag-1 correlations for seasonal AR(1)
+    # Monthly lag-1 and lag-2 autoregressive parameters
     rhos = np.zeros(12, dtype=float)
+    ar2_coef = np.zeros((12, 2), dtype=float)
+    ar2_sig = np.ones(12, dtype=float)
     for mo in range(1, 13):
         idx = np.where(months == mo)[0]
-        idx = idx[idx > 0]
-        r = np.corrcoef(spi[idx - 1], spi[idx])[0, 1]
+        idx1 = idx[idx > 0]
+        r = np.corrcoef(spi[idx1 - 1], spi[idx1])[0, 1]
         rhos[mo - 1] = float(r) if np.isfinite(r) else 0.0
+        idx2 = idx[idx > 1]
+        X2 = np.column_stack([spi[idx2 - 1], spi[idx2 - 2]])
+        beta, _, _, _ = np.linalg.lstsq(X2, spi[idx2], rcond=None)
+        res2 = spi[idx2] - X2 @ beta
+        ar2_coef[mo - 1] = beta
+        ar2_sig[mo - 1] = float(np.std(res2, ddof=2))
 
-    # Prospective month-2 unconditional base and conditional F_w>=1 hit rates
     def _m2_rate(series):
         _, drys = detect_transitions(series)
         hits, total = 0, 0
@@ -252,7 +284,7 @@ def run_null_surrogates(spi, months, years, n_boot=1000, seed=2026):
     year_indices = [np.where(years == y)[0] for y in unique_years]
 
     records = []
-    for mode in ("iid_gaussian", "seasonal_ar1", "year_block_shuffle"):
+    for mode in ("iid_gaussian", "seasonal_ar1", "seasonal_ar2", "year_block_shuffle"):
         cnts, taus, m2_rates = [], [], []
         for _ in range(n_boot):
             if mode == "iid_gaussian":
@@ -263,6 +295,14 @@ def run_null_surrogates(spi, months, years, n_boot=1000, seed=2026):
                 for t in range(1, len(spi)):
                     r_m = rhos[int(months[t]) - 1]
                     sim[t] = r_m * sim[t - 1] + np.sqrt(max(1.0 - r_m**2, 1e-6)) * rng.normal()
+            elif mode == "seasonal_ar2":
+                sim = np.empty(len(spi), dtype=float)
+                sim[0] = rng.normal()
+                sim[1] = rhos[int(months[1]) - 1] * sim[0] + np.sqrt(max(1.0 - rhos[int(months[1]) - 1] ** 2, 1e-6)) * rng.normal()
+                for t in range(2, len(spi)):
+                    m_idx = int(months[t]) - 1
+                    b1, b2 = ar2_coef[m_idx]
+                    sim[t] = b1 * sim[t - 1] + b2 * sim[t - 2] + ar2_sig[m_idx] * rng.normal()
             else:
                 perm = rng.permutation(len(year_indices))
                 sim = np.concatenate([spi[year_indices[p]] for p in perm])
@@ -278,6 +318,7 @@ def run_null_surrogates(spi, months, years, n_boot=1000, seed=2026):
         m2_arr = np.asarray([m for m in m2_rates if np.isfinite(m)], dtype=float)
         p_cnt = float((np.sum(np.abs(cnt_arr - cnt_arr.mean()) >= abs(obs_count - cnt_arr.mean())) + 1) / (len(cnt_arr) + 1))
         records.append({
+            "region": region,
             "surrogate": mode,
             "n_boot": n_boot,
             "obs_count": obs_count,
@@ -299,8 +340,18 @@ def run_null_surrogates(spi, months, years, n_boot=1000, seed=2026):
     return pd.DataFrame(records), rhos
 
 
-def tributary_amplification(events_df, pr_basin, pr_tribs, spi_basin, spi_tribs, months, periods):
-    """Compare basin-mean vs peak tributary SPI and physical precipitation anomalies during wet spells."""
+def tributary_amplification(
+    events_df,
+    pr_basin,
+    pr_tribs,
+    basin_spi,
+    spi_tribs,
+    months,
+    periods,
+    trib_areas_km2=None,
+    basin_area_km2=1748000.0,
+):
+    """Compare basin-mean vs peak tributary SPI, depth excess (mm), and volumetric excess (km^3)."""
     p_map = {p: i for i, p in enumerate(periods)}
     clim_b = np.array([pr_basin[months == mo].mean() for mo in range(1, 13)])
     clim_t = {
@@ -317,10 +368,9 @@ def tributary_amplification(events_df, pr_basin, pr_tribs, spi_basin, spi_tribs,
         ex_b = float(sum(pr_basin[t] - clim_b[int(months[t]) - 1] for t in range(i0, i1 + 1)))
         cl_b_sum = float(sum(clim_b[int(months[t]) - 1] for t in range(i0, i1 + 1)))
         pct_b = 100.0 * ex_b / cl_b_sum if cl_b_sum > 0 else np.nan
+        vol_b_km3 = ex_b * basin_area_km2 * 1e-6
 
-        trib_fw = {}
-        trib_ex = {}
-        trib_pct = {}
+        trib_fw, trib_ex, trib_pct, trib_vol = {}, {}, {}, {}
         for nm, s_t in spi_tribs.items():
             pos = np.maximum(s_t[i0 : i1 + 1], 0.0)
             trib_fw[nm] = float(pos.sum())
@@ -328,6 +378,10 @@ def tributary_amplification(events_df, pr_basin, pr_tribs, spi_basin, spi_tribs,
             cl_t = float(sum(clim_t[nm][int(months[t]) - 1] for t in range(i0, i1 + 1)))
             trib_ex[nm] = ex_t
             trib_pct[nm] = 100.0 * ex_t / cl_t if cl_t > 0 else np.nan
+            if trib_areas_km2 and nm in trib_areas_km2:
+                trib_vol[nm] = ex_t * float(trib_areas_km2[nm]) * 1e-6
+            else:
+                trib_vol[nm] = np.nan
 
         peak_nm = max(trib_fw, key=trib_fw.get)
         peak_fw = trib_fw[peak_nm]
@@ -337,28 +391,87 @@ def tributary_amplification(events_df, pr_basin, pr_tribs, spi_basin, spi_tribs,
         amp_mm = trib_ex[peak_mm_nm] / ex_b if ex_b > 0 else np.nan
         amp_pct = trib_pct[peak_mm_nm] / pct_b if pct_b > 0 else np.nan
 
+        peak_vol_nm = max(trib_vol, key=trib_vol.get) if trib_areas_km2 else peak_mm_nm
+        peak_vol_km3 = trib_vol[peak_vol_nm] if trib_areas_km2 else np.nan
+        vol_share_pct = 100.0 * peak_vol_km3 / vol_b_km3 if (vol_b_km3 > 0 and np.isfinite(peak_vol_km3)) else np.nan
+
+        tmo = int(row["trans_month"])
         rec = {
             "event_id": int(idx) + 1,
             "dry_start": row["dry_start"],
             "wet_start": row["wet_start"],
             "wet_end": row["wet_end"],
             "year": int(row["year"]),
-            "trans_month": int(row["trans_month"]),
+            "trans_month": tmo,
+            "season": _season_label(tmo),
             "F_w_basin": round(fw_b, 3),
             "peak_tributary": peak_nm,
             "F_w_peak_trib": round(peak_fw, 3),
             "spi_amp_ratio": round(amp_spi, 3),
             "basin_precip_ex_mm": round(ex_b, 1),
             "basin_precip_ex_pct": round(pct_b, 1),
+            "basin_precip_vol_km3": round(vol_b_km3, 2),
             "peak_mm_tributary": peak_mm_nm,
             "peak_trib_ex_mm": round(trib_ex[peak_mm_nm], 1),
             "peak_trib_ex_pct": round(trib_pct[peak_mm_nm], 1),
             "mm_excess_ratio": round(amp_mm, 3) if np.isfinite(amp_mm) else np.nan,
             "pct_excess_ratio": round(amp_pct, 3) if np.isfinite(amp_pct) else np.nan,
+            "peak_vol_tributary": peak_vol_nm,
+            "peak_trib_vol_km3": round(peak_vol_km3, 2) if np.isfinite(peak_vol_km3) else np.nan,
+            "peak_vol_share_pct": round(vol_share_pct, 1) if np.isfinite(vol_share_pct) else np.nan,
+            "spi_mm_basin_match": bool(peak_nm == peak_mm_nm),
         }
         for nm, val in trib_fw.items():
             rec[f"Fw_{nm}"] = round(val, 3)
         rows.append(rec)
+    return pd.DataFrame(rows)
+
+
+def summarize_tributary_amplification(trib_df):
+    """Compute season-stratified tributary amplification, volumetric shares, and uncoupled scaling tests."""
+    rows = []
+    strata = [
+        ("All (1961-2025)", trib_df),
+        ("Flood (May-Sep)", trib_df[trib_df["trans_month"].between(5, 9)]),
+        ("Cool (Oct-Apr)", trib_df[~trib_df["trans_month"].between(5, 9)]),
+        ("Winter (Dec-Feb)", trib_df[trib_df["trans_month"].isin([12, 1, 2])]),
+        ("Shoulder (Mar-Apr, Oct-Nov)", trib_df[~trib_df["trans_month"].isin([5, 6, 7, 8, 9, 12, 1, 2])]),
+        ("Mild (F_w < 1.0)", trib_df[trib_df["F_w_basin"] < 1.0]),
+        ("Mod/Sev (F_w >= 1.0)", trib_df[trib_df["F_w_basin"] >= 1.0]),
+    ]
+    mild_df = trib_df[trib_df["F_w_basin"] < 1.0]
+    sev_df = trib_df[trib_df["F_w_basin"] >= 1.0]
+    _, p_mw_spi = stats.mannwhitneyu(mild_df["spi_amp_ratio"], sev_df["spi_amp_ratio"], alternative="two-sided")
+    _, p_mw_mm = stats.mannwhitneyu(mild_df["mm_excess_ratio"].dropna(), sev_df["mm_excess_ratio"].dropna(), alternative="two-sided")
+    rs_level, p_level = stats.spearmanr(trib_df["F_w_basin"], trib_df["F_w_peak_trib"])
+    lr = stats.linregress(np.log(trib_df["F_w_basin"]), np.log(trib_df["F_w_peak_trib"]))
+    t_sublinear = (lr.slope - 1.0) / lr.stderr
+    p_sublinear = 2.0 * float(stats.t.cdf(-abs(t_sublinear), df=len(trib_df) - 2))
+
+    for sname, sub in strata:
+        if sub.empty:
+            continue
+        rows.append({
+            "stratum": sname,
+            "n_events": len(sub),
+            "spi_ratio_median": round(float(sub["spi_amp_ratio"].median()), 3),
+            "spi_ratio_iqr": f"{sub['spi_amp_ratio'].quantile(0.25):.2f}–{sub['spi_amp_ratio'].quantile(0.75):.2f}",
+            "spi_ratio_mean": round(float(sub["spi_amp_ratio"].mean()), 3),
+            "mm_ratio_median": round(float(sub["mm_excess_ratio"].median()), 3),
+            "mm_ratio_iqr": f"{sub['mm_excess_ratio'].quantile(0.25):.2f}–{sub['mm_excess_ratio'].quantile(0.75):.2f}",
+            "mm_ratio_mean": round(float(sub["mm_excess_ratio"].mean()), 3),
+            "basin_ex_mm_median": round(float(sub["basin_precip_ex_mm"].median()), 1),
+            "peak_trib_ex_mm_median": round(float(sub["peak_trib_ex_mm"].median()), 1),
+            "peak_trib_ex_mm_mean": round(float(sub["peak_trib_ex_mm"].mean()), 1),
+            "peak_vol_km3_median": round(float(sub["peak_trib_vol_km3"].median()), 2),
+            "n_spi_mm_divergent": int((~sub["spi_mm_basin_match"]).sum()),
+            "mw_spi_mild_vs_sev_p": round(float(p_mw_spi), 6) if sname.startswith("All") else np.nan,
+            "mw_mm_mild_vs_sev_p": round(float(p_mw_mm), 4) if sname.startswith("All") else np.nan,
+            "level_spearman_rs": round(float(rs_level), 4) if sname.startswith("All") else np.nan,
+            "level_spearman_p": round(float(p_level), 8) if sname.startswith("All") else np.nan,
+            "loglog_slope": round(float(lr.slope), 4) if sname.startswith("All") else np.nan,
+            "loglog_slope_vs1_p": round(float(p_sublinear), 6) if sname.startswith("All") else np.nan,
+        })
     return pd.DataFrame(rows)
 
 

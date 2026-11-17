@@ -1,0 +1,5 @@
+stratum,n_dfaa,n_ord_wet_pool,dfaa_Q_wet_mean,ord_pool_Q_wet_mean,ord_matched_Q_wet_mean,paired_diff_Q_wet,paired_diff_Q_preTGP,paired_diff_delta_Q,mw_p_unpaired,wilcoxon_p_matched
+All (1961-2024),38,125,0.039,0.356,0.229,-0.19,-0.204,0.484,0.0455,0.2044
+Fw < 1.0,17,43,-0.409,-0.018,0.111,-0.521,-0.571,0.149,0.0471,0.0505
+Fw >= 1.0,21,82,0.402,0.552,0.471,-0.07,-0.058,0.626,0.3486,0.7335
+Flood (May-Sep),15,52,0.208,0.364,0.231,-0.023,-0.009,0.61,0.6356,0.8469

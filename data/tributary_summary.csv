@@ -1,0 +1,8 @@
+stratum,n_events,spi_ratio_median,spi_ratio_iqr,spi_ratio_mean,mm_ratio_median,mm_ratio_iqr,mm_ratio_mean,basin_ex_mm_median,peak_trib_ex_mm_median,peak_trib_ex_mm_mean,peak_vol_km3_median,n_spi_mm_divergent,mw_spi_mild_vs_sev_p,mw_mm_mild_vs_sev_p,level_spearman_rs,level_spearman_p,loglog_slope,loglog_slope_vs1_p
+All (1961-2025),39,1.433,1.22–1.83,1.804,3.289,2.67–5.23,3.966,19.0,67.1,88.5,14.23,16,0.000179,0.0217,0.689,1.24e-06,0.622,7e-05
+Flood (May-Sep),16,1.476,1.22–2.12,1.866,2.911,2.47–4.84,3.854,25.7,90.5,109.0,15.15,4,,,,,,
+Cool (Oct-Apr),23,1.401,1.22–1.75,1.761,3.789,3.00–5.23,4.043,13.2,49.8,74.2,9.67,12,,,,,,
+Winter (Dec-Feb),13,1.386,1.25–1.66,1.543,3.289,2.91–4.46,3.64,12.7,37.0,54.5,8.1,8,,,,,,
+"Shoulder (Mar-Apr, Oct-Nov)",10,1.619,1.07–2.55,2.044,4.746,3.09–5.81,4.567,18.1,60.8,99.7,14.67,4,,,,,,
+Mild (F_w < 1.0),18,1.835,1.55–3.07,2.361,4.694,3.34–5.63,4.743,9.4,45.1,49.0,7.36,6,,,,,,
+Mod/Sev (F_w >= 1.0),21,1.242,1.13–1.43,1.327,3.053,2.64–3.32,3.3,32.6,97.9,122.3,22.32,10,,,,,,
