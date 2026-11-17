@@ -843,7 +843,12 @@ def plot_esm_fig1_wave_flux(fields, vectors, mask, out_dir, formats=("png",)):
     step = 2
     qv = ax.quiver(lons_nc[::step], lats_nc[::step], wx[::step, ::step], wy[::step, ::step],
                    scale=6.0, width=0.0032, color="#0F172A", zorder=6)
-    ax.quiverkey(qv, 0.85, 1.03, 0.5, "0.5 m$^2$ s$^{-2}$ ($\\mathbf{W}$ flux)", labelpos="E", coordinates="axes", fontproperties={"size": 8.0})
+    ax.add_patch(mpatches.FancyBboxPatch(
+        (0.73, 0.90), 0.255, 0.075, transform=ax.transAxes,
+        boxstyle="round,pad=0.01", facecolor="#FFFFFF", alpha=0.92, edgecolor="#CBD5E1", lw=0.75, zorder=6.5,
+    ))
+    ax.quiverkey(qv, 0.785, 0.938, 0.5, "0.5 m$^2$ s$^{-2}$ ($\\mathbf{W}$ flux)",
+                 labelpos="E", coordinates="axes", fontproperties={"size": 7.8}).set_zorder(7)
 
     cb = plt.colorbar(cf, ax=ax, fraction=0.036, pad=0.03)
     cb.set_label("200 hPa Geopotential Height Anomaly ($\\sigma$)")
