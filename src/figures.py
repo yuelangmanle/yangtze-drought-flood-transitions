@@ -3,6 +3,7 @@
 from pathlib import Path
 import numpy as np
 import pandas as pd
+from PIL import Image
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -57,7 +58,12 @@ def _save_fig(fig, out_dir, stem, formats=("png",), dpi=600):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     for fmt in formats:
-        fig.savefig(out_dir / f"{stem}.{fmt}", dpi=dpi, bbox_inches="tight")
+        p = out_dir / f"{stem}.{fmt}"
+        fig.savefig(p, dpi=dpi, bbox_inches="tight", facecolor="white")
+        if fmt.lower() == "png":
+            with Image.open(p) as im:
+                if im.mode != "RGB":
+                    im.convert("RGB").save(p, format="PNG", dpi=(dpi, dpi))
     plt.close(fig)
 
 
@@ -175,7 +181,7 @@ def plot_fig1_study_area(mask, clim_df, vectors, out_dir, formats=("png",)):
     ax.set_ylim(23.6, 36.4)
     ax.set_xlabel("Longitude (°E)")
     ax.set_ylabel("Latitude (°N)")
-    ax.set_title("(a) Subregions, tributaries, and mean annual isohyets", loc="left")
+    ax.set_title("a", loc="left", fontsize=11.5, fontweight="bold")
 
     # Panel (b): Monthly precipitation climatology + Temperature annual cycle
     ax2 = fig.add_subplot(gs[0, 1])
@@ -218,7 +224,7 @@ def plot_fig1_study_area(mask, clim_df, vectors, out_dir, formats=("png",)):
     h1, l1 = ax2.get_legend_handles_labels()
     h2, l2 = ax2_t.get_legend_handles_labels()
     ax2.legend(h1 + h2, l1 + l2, loc="upper left", frameon=True, framealpha=0.92, edgecolor="#CBD5E1", fontsize=7.4)
-    ax2.set_title("(b) Monthly hydroclimatic regime (1961–2025)", loc="left")
+    ax2.set_title("b", loc="left", fontsize=11.5, fontweight="bold")
 
     _save_fig(fig, out_dir, "Fig1", formats=formats)
 
@@ -279,7 +285,7 @@ def plot_fig2_tributary_amplification(trib_df, out_dir, formats=("png",)):
              f"Ratio vs. $F_w$: $r_s = -0.59$ ($p < 10^{{-4}}$)",
              transform=ax1.transAxes, va="top", fontsize=7.6,
              bbox=dict(boxstyle="round,pad=0.33", facecolor="#F8FAFC", edgecolor="#CBD5E1"))
-    ax1.set_title("(a) Subbasin vs. basin-mean $F_w$", loc="left")
+    ax1.set_title("a", loc="left", fontsize=11.5, fontweight="bold")
 
     # Panel (b): Stacked event counts (Mild vs Mod/Sev) by tributary
     order = ["Poyang", "Dongting", "Hanjiang", "Wujiang", "Jialing", "Min-Tuo", "Yalong"]
@@ -301,7 +307,7 @@ def plot_fig2_tributary_amplification(trib_df, out_dir, formats=("png",)):
     ax2.grid(axis="x", ls=":", alpha=0.25, zorder=0)
     ax2.set_xlabel("Peak Event Count (Total = 39)")
     ax2.legend(loc="upper right", frameon=True, framealpha=0.93, edgecolor="#CBD5E1", fontsize=7.0)
-    ax2.set_title("(b) Stratified frequency", loc="left")
+    ax2.set_title("b", loc="left", fontsize=11.5, fontweight="bold")
 
     # Panel (c): Amplification ratio distribution per peak tributary
     rng_j = np.random.default_rng(42)
@@ -329,7 +335,7 @@ def plot_fig2_tributary_amplification(trib_df, out_dir, formats=("png",)):
     ax3.set_xlim(0.8, max(ratio) * 1.10)
     ax3.grid(axis="x", ls=":", alpha=0.25, zorder=0)
     ax3.set_xlabel("SPI Amplification ($F_{w,\\mathrm{trib}} / F_{w,\\mathrm{basin}}$)")
-    ax3.set_title("(c) Ratio spread", loc="left")
+    ax3.set_title("c", loc="left", fontsize=11.5, fontweight="bold")
 
     _save_fig(fig, out_dir, "Fig2", formats=formats)
 
@@ -368,7 +374,7 @@ def plot_fig3_chronology_and_seasonality(events_df, out_dir, formats=("png",)):
     ax_top.text(2025.8, mean_rate + 0.06, f"Mean {mean_rate:.2f} yr$^{{-1}}$", fontsize=7.1,
                 color="#475569", ha="right", va="bottom")
     plt.setp(ax_top.get_xticklabels(), visible=False)
-    ax_top.set_title("(a) Event chronology and decadal transition rate (1961–2025)", loc="left")
+    ax_top.set_title("a", loc="left", fontsize=11.5, fontweight="bold")
 
     x_yr = events_df["year"].to_numpy() + (events_df["trans_month"].to_numpy() - 0.5) / 12.0
     sd = events_df["S_d"].to_numpy()
@@ -451,7 +457,7 @@ def plot_fig3_chronology_and_seasonality(events_df, out_dir, formats=("png",)):
     ax2.set_xticklabels(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
                         fontsize=8.1, fontweight="medium", color="#1E293B")
     ax2.grid(color="#CBD5E1", ls=":", lw=0.65)
-    ax2.set_title("(b) Seasonal onset rose (1961–2025)", loc="left", pad=16)
+    ax2.set_title("b", loc="left", fontsize=11.5, fontweight="bold", pad=16)
 
     leg_b = [
         mpatches.Patch(facecolor=PALETTE["blue"], edgecolor="#1E293B", lw=0.5, label="Flood May–Sep (n = 16, 41.0%)"),
@@ -525,7 +531,7 @@ def plot_fig4_dependence_and_spatial(events_df, dep_stats, marg_df, grid_df, gri
     ax_top.set_yticks([])
     ax_top.spines["left"].set_visible(False)
     plt.setp(ax_top.get_xticklabels(), visible=False)
-    ax_top.set_title("(a) Joint $S_d$–$F_w$ marginals, quantiles & independence (n = 39)", loc="left")
+    ax_top.set_title("a", loc="left", fontsize=11.5, fontweight="bold")
 
     # Right marginal: F_w horizontal histogram + fitted Gamma curve (best AICc=76.24)
     ys = np.linspace(0.2, 5.1, 120)
@@ -575,7 +581,7 @@ def plot_fig4_dependence_and_spatial(events_df, dep_stats, marg_df, grid_df, gri
     ax2.set_ylim(23.6, 36.4)
     ax2.set_xlabel("Longitude (°E)")
     ax2.set_ylabel("Latitude (°N)")
-    ax2.set_title("(b) Grid-cell $\\tau$ with BH-FDR & field-null control", loc="left")
+    ax2.set_title("b", loc="left", fontsize=11.5, fontweight="bold")
 
     _save_fig(fig, out_dir, "Fig4", formats=formats)
 
@@ -638,7 +644,7 @@ def plot_fig5_sensitivity_and_runoff(schemes_df, idx_rob_df, events_df, datong_d
     cb_hm.set_label("$\\tau$", fontsize=8.0)
     cb_hm.ax.tick_params(labelsize=7.2)
     n_sig = int((schemes_df["p_value"] < 0.05).sum())
-    ax_hm.set_title(f"(a) Parameter sensitivity matrix ({n_sig}/36 nominal p < 0.05) & index check", loc="left", fontsize=9.8)
+    ax_hm.set_title("a", loc="left", fontsize=11.5, fontweight="bold")
 
     # Bottom subpanel: Multi-index & bridge Forest Plot with Bootstrap 95% CIs
     y_fp = np.arange(len(idx_rob_df))[::-1]
@@ -710,7 +716,7 @@ def plot_fig5_sensitivity_and_runoff(schemes_df, idx_rob_df, events_df, datong_d
     ax2.set_xlabel("Basin Wet Severity $F_w$ (SPI-1 sum)")
     ax2.set_ylabel("Datong Wet-Spell Discharge Anomaly ($\\sigma$)")
     ax2.legend(loc="upper left", frameon=True, framealpha=0.93, edgecolor="#CBD5E1", fontsize=7.3)
-    ax2.set_title("(b) Datong runoff across $F_w$ and dam eras", loc="left")
+    ax2.set_title("b", loc="left", fontsize=11.5, fontweight="bold")
 
     _save_fig(fig, out_dir, "Fig5", formats=formats)
 
@@ -724,14 +730,17 @@ def plot_fig6_circulation_composites(fields, windows_df, vectors, mask, circ_sum
     norm = TwoSlopeNorm(vmin=-1.2, vcenter=0.0, vmax=1.2)
     xlim, ylim = (65, 170), (15, 62)
 
-    for col_idx, (title, z_fld, qu_fld, qv_fld, draw_5880) in enumerate([
-        ("(a) Flood transitions (May–Sep, n = 16)", fields["Z500_flood"], fields["qu_anom_flood"], fields["qv_anom_flood"], True),
-        ("(b) All transitions (Jan–Dec, n = 39)", fields["Z500_all"], fields["qu_anom_all"], fields["qv_anom_all"], False),
+    for col_idx, (panel_lbl, badge_txt, z_fld, qu_fld, qv_fld, draw_5880) in enumerate([
+        ("a", "May–Sep flood (n = 16)", fields["Z500_flood"], fields["qu_anom_flood"], fields["qv_anom_flood"], True),
+        ("b", "All events (n = 39)", fields["Z500_all"], fields["qu_anom_all"], fields["qv_anom_all"], False),
     ]):
         ax = fig.add_subplot(gs[0, col_idx])
         cf = ax.contourf(lons_nc, lats_nc, z_fld, levels=np.linspace(-1.2, 1.2, 13), cmap="RdBu_r", norm=norm, extend="both", zorder=1)
         _draw_coastlines(ax, vectors["coast"], xlim, ylim, color="#475569", lw=0.65, zorder=2)
         _draw_rings(ax, vectors["yrb"], facecolor=None, edgecolor="#111827", lw=1.15, zorder=4)
+        ax.text(0.025, 0.96, badge_txt, transform=ax.transAxes, va="top", ha="left", fontsize=7.6,
+                fontweight="bold", color="#0F172A",
+                bbox=dict(boxstyle="round,pad=0.22", facecolor="#FFFFFF", alpha=0.86, edgecolor="#CBD5E1"), zorder=6)
 
         ax.add_patch(mpatches.Rectangle((125, 35), 25, 15, fill=False, edgecolor="#7F1D1D", lw=1.3, ls="-", zorder=5))
         ax.add_patch(mpatches.Rectangle((90, 25), 20, 17, fill=False, edgecolor="#1E3A8A", lw=1.3, ls="-", zorder=5))
@@ -757,7 +766,7 @@ def plot_fig6_circulation_composites(fields, windows_df, vectors, mask, circ_sum
         ax.set_xlabel("Longitude (°E)")
         if col_idx == 0:
             ax.set_ylabel("Latitude (°N)")
-        ax.set_title(title, loc="left")
+        ax.set_title(panel_lbl, loc="left", fontsize=11.5, fontweight="bold")
 
         if col_idx == 1:
             cax = fig.add_axes([0.92, 0.52, 0.015, 0.35])
@@ -765,9 +774,9 @@ def plot_fig6_circulation_composites(fields, windows_df, vectors, mask, circ_sum
             cb.set_label("Z500 Standardized Anomaly ($\\sigma$)")
 
     lags = np.array([-3, -2, -1, 0, 1])
-    for col_idx, (idx_code, title, ylabel) in enumerate([
-        ("DIV_ps", "(c) Moisture divergence ($\\mathrm{DIV}_{ps}$) window", "Standardized Divergence ($\\sigma$)"),
-        ("DI500", "(d) Dipole index (DI500) window", "DI500 Anomaly ($\\sigma$)"),
+    for col_idx, (idx_code, panel_lbl, ylabel) in enumerate([
+        ("DIV_ps", "c", "$\\mathrm{DIV}_{ps}$ Divergence ($\\sigma$)"),
+        ("DI500", "d", "DI500 Anomaly ($\\sigma$)"),
     ]):
         ax = fig.add_subplot(gs[1, col_idx])
         sub_fl = windows_df[(windows_df["index"] == idx_code) & (windows_df["stratum"] == "Flood")].sort_values("lag")
@@ -797,7 +806,7 @@ def plot_fig6_circulation_composites(fields, windows_df, vectors, mask, circ_sum
         ax.set_xlabel("Lag Relative to Wet-Spell Onset Month $t_0$")
         ax.set_ylabel(ylabel)
         ax.legend(loc="lower left", frameon=True, framealpha=0.92, edgecolor="#CBD5E1", fontsize=7.5)
-        ax.set_title(title, loc="left")
+        ax.set_title(panel_lbl, loc="left", fontsize=11.5, fontweight="bold")
 
     _save_fig(fig, out_dir, "Fig6", formats=formats)
 
@@ -842,6 +851,5 @@ def plot_esm_fig1_wave_flux(fields, vectors, mask, out_dir, formats=("png",)):
     ax.set_ylim(15, 62)
     ax.set_xlabel("Longitude (°E)")
     ax.set_ylabel("Latitude (°N)")
-    ax.set_title("200 hPa wave-activity flux and jet core (n = 16)", loc="left")
 
     _save_fig(fig, out_dir, "ESM_Fig1", formats=formats)
