@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import shapefile
 from shapely.geometry import Point, shape
+from shapely.ops import unary_union
 
 
 SUBBASIN_LABELS = {
@@ -123,3 +124,131 @@ def load_coastlines(geojson_path):
             for part in coords:
                 segments.append(np.asarray(part, dtype=float))
     return segments
+
+
+def _pack_segments(segments):
+    """Flatten variable-length polyline arrays with NaN row separators."""
+    if not segments:
+        return np.zeros((0, 2), dtype=np.float32)
+    parts = []
+    sep = np.array([[np.nan, np.nan]], dtype=np.float32)
+    for seg in segments:
+        arr = np.asarray(seg, dtype=np.float32)
+        if len(arr) >= 2:
+            parts.append(arr)
+            parts.append(sep)
+    return np.vstack(parts) if parts else np.zeros((0, 2), dtype=np.float32)
+
+
+def _unpack_segments(packed):
+    """Restore NaN-separated polyline segments from an array."""
+    if len(packed) == 0:
+        return []
+    breaks = np.where(~np.isfinite(packed[:, 0]))[0]
+    segs = []
+    start = 0
+    for idx in breaks:
+        if idx > start + 1:
+            segs.append(packed[start:idx].astype(float))
+        start = idx + 1
+    if start < len(packed) - 1:
+        segs.append(packed[start:].astype(float))
+    return segs
+
+
+def _geom_to_rings(geom, simplify_tol=0.04):
+    """Extract largest exterior polygon rings from a simplified Shapely geometry."""
+    g = geom.simplify(simplify_tol, preserve_topology=True)
+    rings = []
+    if g.geom_type == "Polygon":
+        rings.append(np.asarray(g.exterior.coords, dtype=float))
+    elif g.geom_type == "MultiPolygon":
+        for poly in sorted(g.geoms, key=lambda p: p.area, reverse=True):
+            if poly.area >= 0.05:
+                rings.append(np.asarray(poly.exterior.coords, dtype=float))
+    return rings
+
+
+def extract_basin_vectors(hybas_l6_prefix, coast_geojson, precip_grid=None, years=None):
+    """Extract smooth HydroBASINS polygons, tributary catchments, and Asia coastlines."""
+    sf = shapefile.Reader(str(hybas_l6_prefix))
+    fields = [f[0] for f in sf.fields[1:]]
+    i_id = fields.index("HYBAS_ID")
+    i_down = fields.index("NEXT_DOWN")
+    recs = sf.records()
+    shapes = sf.shapes()
+
+    ids = np.array([r[i_id] for r in recs])
+    downs = np.array([r[i_down] for r in recs])
+    bbox_idx = [
+        i for i, shp in enumerate(shapes)
+        if shp.bbox[2] >= 89.0 and shp.bbox[0] <= 123.0 and shp.bbox[3] >= 23.5 and shp.bbox[1] <= 36.5
+    ]
+    cand = {i: shape(shapes[i].__geo_interface__) for i in bbox_idx}
+
+    def _trace(pt):
+        hit = next((i for i, poly in cand.items() if poly.contains(Point(*pt))), None)
+        if hit is None:
+            return set()
+        inc = {recs[hit][i_id]}
+        while True:
+            up = np.isin(downs, list(inc)) & ~np.isin(ids, list(inc))
+            if not up.any():
+                break
+            inc.update(ids[up].tolist())
+        return inc
+
+    def _union_ids(id_set):
+        geoms = [cand[i] for i in bbox_idx if recs[i][i_id] in id_set]
+        return unary_union(geoms)
+
+    tr_yi = _trace((111.3, 30.7))
+    tr_dt = _trace((117.2, 30.7))
+    tr_zj = _trace((119.5, 32.2))
+
+    vectors = {
+        "yrb": _geom_to_rings(_union_ids(tr_zj)),
+        "upper": _geom_to_rings(_union_ids(tr_yi)),
+        "middle": _geom_to_rings(_union_ids(tr_dt - tr_yi)),
+        "lower": _geom_to_rings(_union_ids(tr_zj - tr_dt)),
+    }
+    for name, pt in TRIBUTARY_OUTLETS.items():
+        vectors[f"trib_{name}"] = _geom_to_rings(_union_ids(_trace(pt)), simplify_tol=0.05)
+
+    # Trim coastline segments to Greater East Asia domain for compact repository storage
+    raw_segs = load_coastlines(coast_geojson)
+    kept = []
+    for seg in raw_segs:
+        if (
+            np.nanmax(seg[:, 0]) >= 60.0 and np.nanmin(seg[:, 0]) <= 175.0
+            and np.nanmax(seg[:, 1]) >= 12.0 and np.nanmin(seg[:, 1]) <= 64.0
+        ):
+            kept.append(seg)
+    vectors["coast"] = kept
+    if precip_grid is not None and years is not None:
+        nyr = len(np.unique(years))
+        vectors["pr_annual_clim"] = np.nansum(precip_grid, axis=0) / float(nyr)
+    return vectors
+
+
+def save_basin_vectors(out_path, vectors):
+    """Save packed vector rings, coastlines, and climatology arrays into NPZ."""
+    payload = {}
+    for k, val in vectors.items():
+        if k == "pr_annual_clim":
+            payload[k] = np.asarray(val, dtype=np.float32)
+        else:
+            payload[k] = _pack_segments(val)
+    np.savez_compressed(out_path, **payload)
+
+
+def load_basin_vectors(npz_path):
+    """Load unpacked smooth basin rings, coastlines, and precipitation climatology."""
+    data = np.load(npz_path, allow_pickle=False)
+    out = {}
+    for k in data.files:
+        if k == "pr_annual_clim":
+            out[k] = data[k].astype(float)
+        else:
+            out[k] = _unpack_segments(data[k])
+    return out

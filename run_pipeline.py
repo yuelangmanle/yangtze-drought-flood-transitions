@@ -11,8 +11,10 @@ from src.basin import (
     SUBBASIN_LABELS,
     area_weighted_series,
     build_tributary_masks,
+    extract_basin_vectors,
     load_basin_mask,
-    load_coastlines,
+    load_basin_vectors,
+    save_basin_vectors,
 )
 from src.spi import (
     detect_transitions,
@@ -163,6 +165,28 @@ def run_full_pipeline(raw_dir, processed_mask, out_dir, fig_formats=("png",)):
     pet_basin = thornthwaite_pet(t_basin, years, months, mean_lat)
     wb_basin = pr_basin - pet_basin
 
+    from scipy import stats as sc_stats
+    rng_boot = np.random.default_rng(2025)
+
+    def _tau_ci_row(name, ev_list):
+        sd_arr = np.array([e["S_d"] for e in ev_list], dtype=float)
+        fw_arr = np.array([e["F_w"] for e in ev_list], dtype=float)
+        tau_v, p_v = sc_stats.kendalltau(sd_arr, fw_arr)
+        n_ev = len(sd_arr)
+        boots = np.empty(2000, dtype=float)
+        for b in range(2000):
+            idx_b = rng_boot.integers(0, n_ev, size=n_ev)
+            boots[b] = sc_stats.kendalltau(sd_arr[idx_b], fw_arr[idx_b]).statistic
+        lo, hi = np.nanpercentile(boots, [2.5, 97.5])
+        return {
+            "index": name,
+            "n_events": n_ev,
+            "tau": round(float(tau_v), 4),
+            "ci95_lo": round(float(lo), 4),
+            "ci95_hi": round(float(hi), 4),
+            "p_value": round(float(p_v), 4),
+        }
+
     idx_rows = []
     for idx_nm, ser in [
         ("SPI-1", basin_spi),
@@ -171,14 +195,10 @@ def run_full_pipeline(raw_dir, processed_mask, out_dir, fig_formats=("png",)):
         ("SPEI-3", fit_spei(wb_basin, months, scale=3)),
     ]:
         evs, _ = detect_transitions(ser, periods)
-        from scipy import stats as sc_stats
-        tau, pval = sc_stats.kendalltau([e["S_d"] for e in evs], [e["F_w"] for e in evs])
-        idx_rows.append({"index": idx_nm, "n_events": len(evs), "tau": round(float(tau), 4), "p_value": round(float(pval), 4)})
+        idx_rows.append(_tau_ci_row(idx_nm, evs))
 
     ev_br, n_bridges = detect_with_bridge(basin_spi)
-    from scipy import stats as sc_stats
-    tau_br, p_br = sc_stats.kendalltau([e["S_d"] for e in ev_br], [e["F_w"] for e in ev_br])
-    idx_rows.append({"index": f"1-mo bridge ({n_bridges})", "n_events": len(ev_br), "tau": round(float(tau_br), 4), "p_value": round(float(p_br), 4)})
+    idx_rows.append(_tau_ci_row(f"1-mo bridge ({n_bridges})", ev_br))
     idx_rob_df = pd.DataFrame(idx_rows)
     idx_rob_df.to_csv(data_out / "index_robustness.csv", index=False)
 
@@ -207,40 +227,70 @@ def run_full_pipeline(raw_dir, processed_mask, out_dir, fig_formats=("png",)):
         tele_df = seasonal_teleconnection_skill(raw_dir, basin_events_df)
         tele_df.to_csv(data_out / "seasonal_indices_skill.csv", index=False)
 
+    # Monthly basin hydroclimatic climatology (1961-2025)
+    clim_rows = [
+        {
+            "month": mo,
+            "precip_mean_mm": round(float(np.mean(pr_basin[months == mo])), 2),
+            "precip_q25_mm": round(float(np.percentile(pr_basin[months == mo], 25)), 2),
+            "precip_q75_mm": round(float(np.percentile(pr_basin[months == mo], 75)), 2),
+            "temp_mean_c": round(float(np.mean(t_basin[months == mo])), 2),
+        }
+        for mo in range(1, 13)
+    ]
+    clim_df = pd.DataFrame(clim_rows)
+    clim_df.to_csv(data_out / "hydro_climatology.csv", index=False)
+
+    # Smooth HydroBASINS boundaries, tributary polygons, and East Asia coastlines
+    vectors = extract_basin_vectors(
+        raw_dir / "hybas_l6/hybas_as_lev06_v1c",
+        raw_dir / "ne_50m_coastline.geojson",
+        precip_grid=precip_grid,
+        years=years,
+    )
+    save_basin_vectors(data_out / "basin_vectors.npz", vectors)
+
     # Generate figures
-    segments = load_coastlines(raw_dir / "ne_50m_coastline.geojson")
-    plot_fig1_study_area(mask, pr_basin, months, segments, stn_grid, fig_out, formats=fig_formats)
+    plot_fig1_study_area(mask, clim_df, vectors, fig_out, formats=fig_formats)
     plot_fig2_tributary_amplification(trib_df, fig_out, formats=fig_formats)
     plot_fig3_chronology_and_seasonality(basin_events_df, fig_out, formats=fig_formats)
-    plot_fig4_dependence_and_spatial(basin_events_df, subbasin_rows[0], grid_df, grid_summary, mask, fig_out, formats=fig_formats)
+    plot_fig4_dependence_and_spatial(
+        basin_events_df, subbasin_rows[0], marg_df, grid_df, grid_summary, mask, vectors, fig_out, formats=fig_formats
+    )
     plot_fig5_sensitivity_and_runoff(schemes_df, idx_rob_df, basin_events_df, datong_df, fig_out, formats=fig_formats)
-    plot_fig6_circulation_composites(fields, circ_win, segments, mask, circ_sum, circ_ctrl, fig_out, formats=fig_formats)
-    plot_esm_fig1_wave_flux(fields, segments, mask, fig_out, formats=fig_formats)
+    plot_fig6_circulation_composites(fields, circ_win, vectors, mask, circ_sum, circ_ctrl, fig_out, formats=fig_formats)
+    plot_esm_fig1_wave_flux(fields, vectors, mask, fig_out, formats=fig_formats)
 
     _write_sha256_manifest(data_out)
     print(f"Pipeline complete -> data written to {data_out}, figures written to {fig_out}")
 
 
 def run_derived_only(out_dir, fig_formats=("png",)):
-    """Re-verify statistical summaries and re-plot figures Fig2-Fig5 from CSV deliverables."""
+    """Re-verify statistical summaries and re-plot figures Fig1-Fig5 from CSV deliverables."""
     out_dir = Path(out_dir)
     data_out = out_dir / "data"
     fig_out = out_dir / "figures"
 
     mask = load_basin_mask(data_out / "yangtze_mask.npz")
+    vectors = load_basin_vectors(data_out / "basin_vectors.npz")
+    clim_df = pd.read_csv(data_out / "hydro_climatology.csv")
     events_df = pd.read_csv(data_out / "event_catalog.csv")
     trib_df = pd.read_csv(data_out / "tributary_amplification.csv")
     schemes_df = pd.read_csv(data_out / "sensitivity_schemes.csv")
     idx_rob_df = pd.read_csv(data_out / "index_robustness.csv")
     datong_df = pd.read_csv(data_out / "datong_strata.csv")
+    marg_df = pd.read_csv(data_out / "marginal_fits.csv")
     grid_df = pd.read_csv(data_out / "spatial_field_grid.csv")
     grid_summary = pd.read_csv(data_out / "spatial_field_summary.csv").iloc[0].to_dict()
     sub_df = pd.read_csv(data_out / "subregion_summary.csv")
     basin_dep = sub_df[sub_df["region"] == "Basin"].iloc[0].to_dict()
 
+    plot_fig1_study_area(mask, clim_df, vectors, fig_out, formats=fig_formats)
     plot_fig2_tributary_amplification(trib_df, fig_out, formats=fig_formats)
     plot_fig3_chronology_and_seasonality(events_df, fig_out, formats=fig_formats)
-    plot_fig4_dependence_and_spatial(events_df, basin_dep, grid_df, grid_summary, mask, fig_out, formats=fig_formats)
+    plot_fig4_dependence_and_spatial(
+        events_df, basin_dep, marg_df, grid_df, grid_summary, mask, vectors, fig_out, formats=fig_formats
+    )
     plot_fig5_sensitivity_and_runoff(schemes_df, idx_rob_df, events_df, datong_df, fig_out, formats=fig_formats)
     print(f"Derived-only verification passed ({len(events_df)} events, figures refreshed in {fig_out})")
 
