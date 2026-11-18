@@ -1,0 +1,4 @@
+zone,n_cells,cos_frac_of_basin_pct,mean_event_fw_spi,median_event_fw_spi,median_event_mm_excess,n_exceed_all_7tribs
+Residual non-tributary (All),228,27.21,1.179,0.934,12.36,5
+Upper Jinsha + Chongqing-Yichang TGP interval,169,20.43,0.931,0.591,4.3,3
+Middle-Lower mainstem corridor,59,6.78,1.07,0.913,28.19,5

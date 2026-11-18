@@ -55,6 +55,23 @@ def dependence_summary(sd, fw):
     valid_b = boot_slopes[np.isfinite(boot_slopes)]
     q90_se = float(np.std(valid_b, ddof=1)) if len(valid_b) >= 20 else np.nan
     q90_p = float(2.0 * stats.norm.cdf(-abs(q90_slope / q90_se))) if (np.isfinite(q90_se) and q90_se > 0) else np.nan
+    q90_lo, q90_hi = (float(np.percentile(valid_b, 2.5)), float(np.percentile(valid_b, 97.5))) if len(valid_b) >= 20 else (np.nan, np.nan)
+
+    rng_c = np.random.default_rng(78)
+    b_tau, b_rs = np.empty(400, dtype=float), np.empty(400, dtype=float)
+    for b_i in range(400):
+        idx_c = rng_c.integers(0, n, size=n)
+        b_tau[b_i] = float(stats.kendalltau(sd[idx_c], fw[idx_c]).statistic)
+        b_rs[b_i] = float(stats.spearmanr(sd[idx_c], fw[idx_c]).statistic)
+    t_lo, t_hi = np.nanpercentile(b_tau, [2.5, 97.5])
+    r_lo, r_hi = np.nanpercentile(b_rs, [2.5, 97.5])
+
+    loo_taus, loo_ps = [], []
+    if n >= 6:
+        for k in range(n):
+            tk, pk = stats.kendalltau(np.delete(sd, k), np.delete(fw, k))
+            loo_taus.append(float(tk))
+            loo_ps.append(float(pk))
     return {
         "n": n,
         "S_d_mean": round(float(np.mean(sd)), 3),
@@ -62,8 +79,12 @@ def dependence_summary(sd, fw):
         "F_w_mean": round(float(np.mean(fw)), 3),
         "F_w_median": round(float(np.median(fw)), 3),
         "kendall_tau": round(float(tau), 4),
+        "tau_ci95_lo": round(float(t_lo), 4),
+        "tau_ci95_hi": round(float(t_hi), 4),
         "kendall_p": round(float(p_tau), 4),
         "spearman_r": round(float(rs), 4),
+        "rs_ci95_lo": round(float(r_lo), 4),
+        "rs_ci95_hi": round(float(r_hi), 4),
         "spearman_p": round(float(p_rs), 4),
         "pearson_r": round(float(rp), 4),
         "pearson_p": round(float(p_rp), 4),
@@ -77,6 +98,11 @@ def dependence_summary(sd, fw):
         "q90_slope": round(q90_slope, 4),
         "q90_se": round(q90_se, 4) if np.isfinite(q90_se) else np.nan,
         "q90_p": round(q90_p, 4) if np.isfinite(q90_p) else np.nan,
+        "q90_ci95_lo": round(q90_lo, 4) if np.isfinite(q90_lo) else np.nan,
+        "q90_ci95_hi": round(q90_hi, 4) if np.isfinite(q90_hi) else np.nan,
+        "loo_tau_min": round(float(min(loo_taus)), 4) if loo_taus else np.nan,
+        "loo_tau_max": round(float(max(loo_taus)), 4) if loo_taus else np.nan,
+        "loo_tau_max_p": round(float(max(loo_ps)), 4) if loo_ps else np.nan,
     }
 
 
@@ -172,9 +198,11 @@ def _fit_copula_param(name, u, v, tau):
         return np.nan, 0.0
     if name == "Gaussian":
         zu, zv = stats.norm.ppf(u), stats.norm.ppf(v)
-        rho = float(np.clip(np.corrcoef(zu, zv)[0, 1], -0.98, 0.98))
-        ll = float(np.sum(-0.5 * np.log(1.0 - rho**2) - (rho**2 * (zu**2 + zv**2) - 2.0 * rho * zu * zv) / (2.0 * (1.0 - rho**2))))
-        return rho, ll
+        def _nll_gauss(r_arr):
+            r = float(r_arr[0])
+            return float(-np.sum(-0.5 * np.log(1.0 - r**2) - (r**2 * (zu**2 + zv**2) - 2.0 * r * zu * zv) / (2.0 * (1.0 - r**2))))
+        res = optimize.minimize(_nll_gauss, [float(np.clip(np.corrcoef(zu, zv)[0, 1], -0.95, 0.95))], bounds=[(-0.98, 0.98)])
+        return float(res.x[0]), float(-res.fun)
     if name == "Frank":
         def _nll(th_arr):
             th = float(th_arr[0])
@@ -370,17 +398,27 @@ def prospective_onset_skill(
     trig_years = []
     trig_modsev = []
 
+    def _season_match(mo_val):
+        if season_filter is None:
+            return True
+        if season_filter == "Flood (May-Sep)":
+            return 5 <= mo_val <= 9
+        if season_filter == "Spring (Mar-Apr)":
+            return mo_val in (3, 4)
+        if season_filter == "Autumn (Oct-Nov)":
+            return mo_val in (10, 11)
+        if season_filter == "Winter (Dec-Feb)":
+            return mo_val in (12, 1, 2)
+        if season_filter == "Cool (Oct-Apr)":
+            return not (5 <= mo_val <= 9)
+        return True
+
     for s0, _ in dry_spells:
         origin = s0 + 1
         if origin + max_gap >= len(spi):
             continue
-        if periods is not None and season_filter is not None:
-            mo = int(periods[origin].month)
-            is_fl = 5 <= mo <= 9
-            if season_filter == "Flood (May-Sep)" and not is_fl:
-                continue
-            if season_filter == "Cool (Oct-Apr)" and is_fl:
-                continue
+        if periods is not None and not _season_match(int(periods[origin].month)):
+            continue
 
         n_unc += 1
         trig_months.append(int(periods[origin].month) if periods is not None else ((origin % 12) + 1))
@@ -439,14 +477,15 @@ def prospective_onset_skill(
     else:
         c_lo, c_hi = np.nan, np.nan
 
-    # All-month rolling baseline plus seasonally matched non-wet-origin (SPI < wet_th) baseline
+    # All-month rolling baseline plus seasonally matched non-wet-origin (SPI < wet_th) & disjoint neutral (-0.5 < SPI < wet_th) baselines
     u_any = u_mod = u_tot = 0
     nw_by_mo = {m: [] for m in range(1, 13)}
+    neu_by_mo = {m: [] for m in range(1, 13)}
+    nw_yr_mo = {}
     for t in range(len(spi) - max_gap):
         mo_t = int(periods[t].month) if periods is not None else ((t % 12) + 1)
-        if season_filter == "Flood (May-Sep)" and not (5 <= mo_t <= 9):
-            continue
-        if season_filter == "Cool (Oct-Apr)" and (5 <= mo_t <= 9):
+        yr_t = int(periods[t].year) if periods is not None else (1961 + t // 12)
+        if not _season_match(mo_t):
             continue
         u_tot += 1
         w4 = spi[t + 1 : t + max_gap + 1]
@@ -463,6 +502,9 @@ def prospective_onset_skill(
                 hit_fw1 = 1
         if np.isfinite(spi[t]) and spi[t] < wet_th:
             nw_by_mo[mo_t].append(hit_fw1)
+            nw_yr_mo.setdefault(yr_t, []).append((mo_t, hit_fw1))
+            if spi[t] > dry_th:
+                neu_by_mo[mo_t].append(hit_fw1)
 
     if trig_months:
         mo_weights = {m: trig_months.count(m) / float(len(trig_months)) for m in range(1, 13)}
@@ -470,19 +512,29 @@ def prospective_onset_skill(
             mo_weights[m] * (float(np.mean(nw_by_mo[m])) if nw_by_mo[m] else 0.0)
             for m in range(1, 13)
         )
-        # Year-block bootstrap CI for the weighted non-wet baseline
+        neutral_rate = sum(
+            mo_weights[m] * (float(np.mean(neu_by_mo[m])) if neu_by_mo[m] else 0.0)
+            for m in range(1, 13)
+        )
+        # Year-block bootstrap CI for the weighted non-wet baseline preserving intra-year overlap
+        base_yrs = sorted(nw_yr_mo.keys())
         nw_boots = []
         for _ in range(1000):
-            r_b = 0.0
-            for m, wt in mo_weights.items():
-                if wt > 0 and nw_by_mo[m]:
-                    arr_m = np.asarray(nw_by_mo[m], dtype=float)
-                    idx_m = rng.integers(0, len(arr_m), size=len(arr_m))
-                    r_b += wt * float(np.mean(arr_m[idx_m]))
+            sampled_yrs = rng.choice(base_yrs, size=len(base_yrs), replace=True)
+            b_sums = {m: 0.0 for m in range(1, 13)}
+            b_cnts = {m: 0 for m in range(1, 13)}
+            for yy in sampled_yrs:
+                for mo_v, hv in nw_yr_mo[int(yy)]:
+                    b_sums[mo_v] += hv
+                    b_cnts[mo_v] += 1
+            r_b = sum(
+                mo_weights[m] * (b_sums[m] / b_cnts[m] if b_cnts[m] > 0 else float(np.mean(nw_by_mo[m])))
+                for m in range(1, 13) if mo_weights[m] > 0
+            )
             nw_boots.append(r_b)
         nw_lo, nw_hi = np.percentile(nw_boots, [2.5, 97.5])
     else:
-        nonwet_rate, nw_lo, nw_hi = np.nan, np.nan, np.nan
+        nonwet_rate, neutral_rate, nw_lo, nw_hi = np.nan, np.nan, np.nan, np.nan
 
     return {
         "season_filter": season_filter or "All",
@@ -509,6 +561,7 @@ def prospective_onset_skill(
         "nonwet_base_pct": round(100.0 * nonwet_rate, 1) if np.isfinite(nonwet_rate) else np.nan,
         "nonwet_base_ci95_lo": round(100.0 * nw_lo, 1) if np.isfinite(nw_lo) else np.nan,
         "nonwet_base_ci95_hi": round(100.0 * nw_hi, 1) if np.isfinite(nw_hi) else np.nan,
+        "neutral_base_pct": round(100.0 * neutral_rate, 1) if np.isfinite(neutral_rate) else np.nan,
     }
 
 

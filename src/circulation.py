@@ -37,7 +37,7 @@ def detrend_monthly_std_1d(values, months):
         t = np.arange(len(idx), dtype=float)
         trend = np.polyval(np.polyfit(t, x, 1), t)
         xd = x - trend
-        sd = float(np.std(xd))
+        sd = float(np.std(xd, ddof=1))
         out[idx] = xd / sd if sd > 0 else np.nan
     return out
 
@@ -55,7 +55,7 @@ def detrend_monthly_std_3d(field, months):
         mean_x = np.nanmean(x, axis=0)
         slope = np.nansum(tc[:, None, None] * (x_fill - mean_x[None, :, :]), axis=0) / np.sum(tc**2)
         xd = x - (mean_x[None, :, :] + slope[None, :, :] * tc[:, None, None])
-        sd = np.nanstd(xd, axis=0)
+        sd = np.nanstd(xd, axis=0, ddof=1)
         sd[sd == 0] = np.nan
         out[idx] = xd / sd[None, :, :]
     return out
@@ -140,16 +140,19 @@ def spherical_divergence(qu, qv, lats, ddeg=2.5):
 
 
 def build_reanalysis_basin_mask(lat_nc, lon_nc, basin_lats, basin_lons, basin_frac):
-    """Map the 0.5-deg basin mask onto full 2.5-deg reanalysis cells with frac * cos(lat) weights."""
+    """Map the 0.5-deg basin mask onto full 2.5-deg reanalysis cells with half-split boundary weights."""
     cos_b = np.cos(np.deg2rad(basin_lats))[:, None]
     w_fine = basin_frac * cos_b
     dlat_r = float(abs(lat_nc[1] - lat_nc[0])) * 0.5 if len(lat_nc) > 1 else 1.25
     dlon_r = float(abs(lon_nc[1] - lon_nc[0])) * 0.5 if len(lon_nc) > 1 else 1.25
     w = np.zeros((len(lat_nc), len(lon_nc)), dtype=float)
     for i, la in enumerate(lat_nc):
+        dla = np.abs(basin_lats - la)
+        wla = np.where(dla < dlat_r - 1e-9, 1.0, np.where(np.abs(dla - dlat_r) <= 1e-9, 0.5, 0.0))
         for j, lo in enumerate(lon_nc):
-            sub = (np.abs(basin_lats - la) <= dlat_r)[:, None] & (np.abs(basin_lons - lo) <= dlon_r)[None, :]
-            val = float(np.sum(w_fine * sub))
+            dlo = np.abs(basin_lons - lo)
+            wlo = np.where(dlo < dlon_r - 1e-9, 1.0, np.where(np.abs(dlo - dlon_r) <= 1e-9, 0.5, 0.0))
+            val = float(np.sum(w_fine * wla[:, None] * wlo[None, :]))
             if val > 0.0:
                 w[i, j] = val
     w /= w.sum()
@@ -202,7 +205,7 @@ def _expand_months(start_str, end_str):
     return [p0 + k for k in range((p1 - p0).n + 1)]
 
 
-def takaya_nakamura_flux_200(z200_c, u200_c, v200_c, lats, u_min=8.0):
+def takaya_nakamura_flux_200(z200_c, u200_c, v200_c, lats, u_min=10.0, lat_min=25.0):
     """Horizontal stationary wave-activity flux W [m^2 s^-2] at 200 hPa (Takaya & Nakamura 2001)."""
     flip = lats[0] > lats[-1]
     if flip:
@@ -227,9 +230,10 @@ def takaya_nakamura_flux_200(z200_c, u200_c, v200_c, lats, u_min=8.0):
     psi_yy = np.gradient(psi_y, axis=0) / dy
 
     umag = np.hypot(uc, vc)
-    umag = np.where(umag >= u_min, umag, np.nan)
+    valid_w = (np.abs(la[:, None]) >= lat_min) & (umag >= u_min)
+    umag_safe = np.where(valid_w, umag, np.nan)
     cos_lat = np.cos(np.deg2rad(la))[:, None]
-    pref = (200.0 / 1000.0) * cos_lat / (2.0 * umag)
+    pref = (200.0 / 1000.0) * cos_lat / (2.0 * umag_safe)
 
     wx = pref * (uc * (psi_x**2 - psi * psi_xx) + vc * (psi_x * psi_y - psi * psi_xy))
     wy = pref * (uc * (psi_x * psi_y - psi * psi_xy) + vc * (psi_y**2 - psi * psi_yy))
@@ -324,23 +328,38 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
     ps_clim_hpa = np.nanmean(ps_vals_hpa, axis=0)
     mask_850 = ps_clim_hpa >= 850.0
 
-    # Standardize composite indices AFTER box differencing so every series has unit calendar-month SD
+    # Standardize composite indices AFTER box differencing using exact Huang (2004) EAP850 over 115E-140E
     DI500_raw = _box_mean(Z500, lat_a, lon_a, 35, 50, 125, 150) - _box_mean(Z500, lat_a, lon_a, 25, 42, 90, 110)
     DI200_raw = _box_mean(Z200, lat_a, lon_a, 35, 50, 125, 150) - _box_mean(Z200, lat_a, lon_a, 25, 42, 90, 110)
-    EAP850_raw = (
-        _box_mean(Z850, lat_a, lon_a, 15, 25, 110, 130, valid_2d=mask_850)
-        - _box_mean(Z850, lat_a, lon_a, 27.5, 40, 115, 135, valid_2d=mask_850)
-        + _box_mean(Z850, lat_a, lon_a, 42.5, 55, 115, 140, valid_2d=mask_850)
-    )
+    EAP850_S = _box_mean(Z850, lat_a, lon_a, 15, 25, 115, 140, valid_2d=mask_850)
+    EAP850_M = _box_mean(Z850, lat_a, lon_a, 30, 40, 115, 140, valid_2d=mask_850)
+    EAP850_N = _box_mean(Z850, lat_a, lon_a, 50, 60, 115, 140, valid_2d=mask_850)
+    EAP850_raw = -0.25 * EAP850_S + 0.50 * EAP850_M - 0.25 * EAP850_N
+
     DI500 = detrend_monthly_std_1d(DI500_raw, mons_nc)
     DI200 = detrend_monthly_std_1d(DI200_raw, mons_nc)
     EAP850 = detrend_monthly_std_1d(EAP850_raw, mons_nc)
+    NE500_pole = detrend_monthly_std_1d(_box_mean(Z500, lat_a, lon_a, 35, 50, 125, 150), mons_nc)
+    PL500_pole = detrend_monthly_std_1d(_box_mean(Z500, lat_a, lon_a, 25, 42, 90, 110), mons_nc)
+    PL500_west_pole = detrend_monthly_std_1d(_box_mean(Z500, lat_a, lon_a, 25, 42, 70, 90), mons_nc)
+    EAP850_S_pole = detrend_monthly_std_1d(EAP850_S, mons_nc)
+    EAP850_M_pole = detrend_monthly_std_1d(EAP850_M, mons_nc)
+    EAP850_N_pole = detrend_monthly_std_1d(EAP850_N, mons_nc)
 
+    flood_ov_mask = events_df.apply(
+        lambda r: any(5 <= p.month <= 9 for p in _expand_months(r["wet_start"], r["wet_end"])),
+        axis=1,
+    )
     strata = [
         ("All (1961-2025)", events_df),
         ("Flood (May-Sep)", events_df[events_df["trans_month"].between(5, 9)]),
+        ("JJA (Jun-Aug)", events_df[events_df["trans_month"].isin([6, 7, 8])]),
+        ("Flood Overlap (May-Sep)", events_df[flood_ov_mask]),
+        ("Spring (Mar-Apr)", events_df[events_df["trans_month"].isin([3, 4])]),
+        ("Autumn (Oct-Nov)", events_df[events_df["trans_month"].isin([10, 11])]),
         ("Winter (Dec-Feb)", events_df[events_df["trans_month"].isin([12, 1, 2])]),
-        ("Shoulder (Mar-Apr, Oct-Nov)", events_df[~events_df["trans_month"].isin([5, 6, 7, 8, 9, 12, 1, 2])]),
+        ("Immediate g=1", events_df[events_df["gap"] == 1]),
+        ("Short-gap g<=2", events_df[events_df["gap"] <= 2]),
         ("Post-1979 All", events_df[events_df["year"] >= 1979]),
         ("Post-1979 Flood", events_df[(events_df["year"] >= 1979) & events_df["trans_month"].between(5, 9)]),
     ]
@@ -350,6 +369,12 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
         ("DI500", DI500),
         ("DI200", DI200),
         ("EAP850", EAP850),
+        ("NE500_pole", NE500_pole),
+        ("PL500_pole", PL500_pole),
+        ("PL500_west_pole", PL500_west_pole),
+        ("EAP850_S_pole", EAP850_S_pole),
+        ("EAP850_M_pole", EAP850_M_pole),
+        ("EAP850_N_pole", EAP850_N_pole),
     ]
 
     summary_rows = []
@@ -374,15 +399,21 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
             summary_rows.append(res)
     summary_df = pd.DataFrame(summary_rows)
     prim_mask = summary_df["index"].isin(["DIV_ps", "DI500", "DI200", "EAP850"]) & summary_df["stratum"].isin([
-        "All (1961-2025)", "Flood (May-Sep)", "Winter (Dec-Feb)", "Shoulder (Mar-Apr, Oct-Nov)"
+        "All (1961-2025)", "Flood (May-Sep)", "Spring (Mar-Apr)", "Autumn (Oct-Nov)", "Winter (Dec-Feb)"
     ])
     summary_df["q_FDR"] = np.nan
     summary_df.loc[prim_mask, "q_FDR"] = np.round(bh_fdr(summary_df.loc[prim_mask, "p_value"].to_numpy()), 4)
 
-    # Event-window trajectories [t_w0-3 .. t_w0+1] with separate All and Flood climatological bands
+    # Event-window trajectories [t_w0-3 .. t_w0+1] across All, Flood, Flood Overlap, and gap strata
     mo_pools = {mo: np.where(mons_nc == mo)[0] for mo in range(1, 13)}
     win_rows = []
-    for sname, sub in [("All", events_df), ("Flood", events_df[events_df["trans_month"].between(5, 9)])]:
+    for sname, sub in [
+        ("All", events_df),
+        ("Flood", events_df[events_df["trans_month"].between(5, 9)]),
+        ("Flood Overlap", events_df[flood_ov_mask]),
+        ("Immediate g=1", events_df[events_df["gap"] == 1]),
+        ("Short-gap g<=2", events_df[events_df["gap"] <= 2]),
+    ]:
         t0_idx = [tl_map[pd.Period(r["wet_start"], freq="M")] for _, r in sub.iterrows()]
         t0_mos = [pd.Period(r["wet_start"], freq="M").month for _, r in sub.iterrows()]
         for iname, ser in [("DIV_ps", DIV_ps), ("DI500", DI500), ("DI200", DI200), ("EAP850", EAP850)]:
@@ -402,52 +433,86 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
                 })
     windows_df = pd.DataFrame(win_rows)
 
-    # Matched ordinary wet-month controls (strict +/-0.1 and full-sample nearest-within-0.5 fallback)
+    # Matched ordinary wet-month controls (all-wet & onset-only controls, strict >= +0.5 pool)
     spi_map = {p: i for i, p in enumerate(spi_periods)}
     all_wet = set()
     for _, r in events_df.iterrows():
         all_wet.update(_expand_months(r["wet_start"], r["wet_end"]))
 
+    ctrl_schemes = [
+        ("tol_0.1", 0.1, False, False),
+        ("tol_0.2_nn_all39", 0.2, True, False),
+        ("tol_0.1_onset", 0.1, False, True),
+        ("tol_0.2_nn_onset", 0.2, True, True),
+    ]
+    ctrl_indices = [
+        ("DIV_ps", DIV_ps),
+        ("DI500", DI500),
+        ("DI200", DI200),
+        ("EAP850", EAP850),
+        ("NE500_pole", NE500_pole),
+        ("PL500_pole", PL500_pole),
+    ]
     ctrl_rows = []
-    for tol_lbl, tol, allow_nn in [("tol_0.1", 0.1, False), ("tol_0.2_nn_all39", 0.2, True)]:
-        for iname, ser in [("DIV_ps", DIV_ps), ("DI500", DI500), ("DI200", DI200), ("EAP850", EAP850)]:
-            d_all, d_fl = [], []
-            case_all, ctrl_pool_all = [], []
-            case_fl, ctrl_pool_fl = [], []
-            for _, r in events_df.iterrows():
+    ord_wet_flood_pools = {}
+    for tol_lbl, tol, allow_nn, onset_only in ctrl_schemes:
+        for iname, ser in ctrl_indices:
+            ev_diff_list = []
+            for ev_pos, (_, r) in enumerate(events_df.iterrows()):
                 t0 = pd.Period(r["wet_start"], freq="M")
                 spi0 = spi_basin[spi_map[t0]]
-                cands = [
-                    tl_map[p]
-                    for i, p in enumerate(spi_periods)
-                    if p.month == t0.month and p not in all_wet and abs(spi_basin[i] - spi0) <= tol and p in tl_map
-                ]
+                cands = []
+                for i, p in enumerate(spi_periods):
+                    if p.month != t0.month or p in all_wet or p not in tl_map:
+                        continue
+                    if not np.isfinite(spi_basin[i]) or spi_basin[i] < 0.5:
+                        continue
+                    if onset_only and i > 0 and np.isfinite(spi_basin[i - 1]) and spi_basin[i - 1] >= 0.5:
+                        continue
+                    if abs(spi_basin[i] - spi0) <= tol:
+                        cands.append(tl_map[p])
                 if not cands and allow_nn:
-                    mo_cands = [
-                        (abs(spi_basin[i] - spi0), tl_map[p])
-                        for i, p in enumerate(spi_periods)
-                        if p.month == t0.month and p not in all_wet and spi_basin[i] >= 0.5 and p in tl_map
-                    ]
+                    mo_cands = []
+                    for i, p in enumerate(spi_periods):
+                        if p.month != t0.month or p in all_wet or p not in tl_map:
+                            continue
+                        if not np.isfinite(spi_basin[i]) or spi_basin[i] < 0.5:
+                            continue
+                        if onset_only and i > 0 and np.isfinite(spi_basin[i - 1]) and spi_basin[i - 1] >= 0.5:
+                            continue
+                        mo_cands.append((abs(spi_basin[i] - spi0), tl_map[p]))
                     if mo_cands:
                         mo_cands.sort(key=lambda x: x[0])
                         cands = [c[1] for c in mo_cands[:3]]
                 if not cands:
                     continue
+                if tol_lbl in ("tol_0.2_nn_all39", "tol_0.2_nn_onset") and iname == "DI500" and 5 <= int(r["trans_month"]) <= 9:
+                    ord_wet_flood_pools.setdefault(tol_lbl, []).append(cands)
                 diff = float(ser[tl_map[t0]] - np.nanmean([ser[c] for c in cands]))
-                d_all.append(diff)
-                case_all.append(tl_map[t0])
-                ctrl_pool_all.append(cands)
-                if 5 <= int(r["trans_month"]) <= 9:
-                    d_fl.append(diff)
-                    case_fl.append(tl_map[t0])
-                    ctrl_pool_fl.append(cands)
+                ev_diff_list.append({
+                    "diff": diff,
+                    "case_idx": tl_map[t0],
+                    "cands": cands,
+                    "year": int(r["year"]),
+                    "trans_month": int(r["trans_month"]),
+                    "flood_ov": bool(flood_ov_mask.iloc[ev_pos]),
+                })
 
-            for sname, arr, cases_i, pools_i in [
-                ("All matched", d_all, case_all, ctrl_pool_all),
-                ("Flood matched", d_fl, case_fl, ctrl_pool_fl),
-            ]:
+            ctrl_strata = [
+                ("All matched", [d for d in ev_diff_list]),
+                ("Flood matched", [d for d in ev_diff_list if 5 <= d["trans_month"] <= 9]),
+                ("JJA matched", [d for d in ev_diff_list if d["trans_month"] in (6, 7, 8)]),
+                ("Flood Overlap matched", [d for d in ev_diff_list if d["flood_ov"]]),
+                ("1961-1992 matched", [d for d in ev_diff_list if d["year"] <= 1992]),
+                ("1993-2025 matched", [d for d in ev_diff_list if d["year"] >= 1993]),
+            ]
+            for sname, slist in ctrl_strata:
+                arr = [d["diff"] for d in slist]
+                cases_i = [d["case_idx"] for d in slist]
+                pools_i = [d["cands"] for d in slist]
+                if len(arr) < 3:
+                    continue
                 res = paired_sign_flip_test(arr, n_perm=n_perm, rng=rng)
-                # Case-control month-stratified permutation preserving shared candidate-pool structure
                 obs_m = float(np.mean(arr))
                 null_cc = np.empty(n_perm, dtype=float)
                 for b_i in range(n_perm):
@@ -469,9 +534,14 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
                 ctrl_rows.append(res)
     controls_df = pd.DataFrame(ctrl_rows)
     controls_df["q_FDR"] = np.nan
-    for slbl in ("tol_0.1", "tol_0.2_nn_all39"):
-        m_c = controls_df["scheme"] == slbl
-        controls_df.loc[m_c, "q_FDR"] = np.round(bh_fdr(controls_df.loc[m_c, "p_value"].to_numpy()), 4)
+    for slbl, _, _, _ in ctrl_schemes:
+        m_c = (
+            (controls_df["scheme"] == slbl)
+            & controls_df["index"].isin(["DIV_ps", "DI500", "DI200", "EAP850"])
+            & controls_df["stratum"].isin(["All matched", "Flood matched"])
+        )
+        if m_c.any():
+            controls_df.loc[m_c, "q_FDR"] = np.round(bh_fdr(controls_df.loc[m_c, "p_value"].to_numpy()), 4)
 
     # Split-half, seasonal/satellite splits, genuine OOS, non-YRB upstream boxes, & NCEP-DOE-2 verification
     verif_rows = []
@@ -494,7 +564,7 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
         res.update({"check": period_tag, "dataset": "NCEP-1 500 hPa"})
         verif_rows.append(res)
 
-    # Empirical 1961-1992 decile centers evaluated strictly out-of-sample on 1993-2025
+    # Empirical 1961-1992 decile centers evaluated strictly out-of-sample on 1993-2025 (wet-dry and matched)
     i_h1 = [tl_map[pd.Period(r["wet_start"], freq="M")] for _, r in h1.iterrows()]
     comp_h1 = np.nanmean(Z500[i_h1], axis=0)
     ea_mask = (lat_a[:, None] >= 15) & (lat_a[:, None] <= 60) & (lon_a[None, :] >= 65) & (lon_a[None, :] <= 165)
@@ -534,6 +604,34 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
     res_emp_fl.update({"check": "Empirical 1961-92 deciles OOS Flood (1993-2025)", "dataset": "NCEP-1 500 hPa"})
     verif_rows.append(res_emp_fl)
 
+    # Matched ordinary-wet OOS check for empirical 1961-92 deciles on 1993-2025
+    for oos_tag, oos_sub, oos_ser in [
+        ("Empirical 1961-92 OOS matched (1993-2025 All)", h2, DI_emp),
+        ("Empirical 1961-92 OOS matched Flood (1993-2025)", h2_fl, DI_emp_fl),
+    ]:
+        oos_diffs = []
+        for _, r in oos_sub.iterrows():
+            t0 = pd.Period(r["wet_start"], freq="M")
+            spi0 = spi_basin[spi_map[t0]]
+            cands = [
+                tl_map[p]
+                for i, p in enumerate(spi_periods)
+                if p.month == t0.month and p not in all_wet and np.isfinite(spi_basin[i]) and spi_basin[i] >= 0.5 and abs(spi_basin[i] - spi0) <= 0.2 and p in tl_map
+            ]
+            if not cands:
+                mo_cands = [
+                    (abs(spi_basin[i] - spi0), tl_map[p])
+                    for i, p in enumerate(spi_periods)
+                    if p.month == t0.month and p not in all_wet and np.isfinite(spi_basin[i]) and spi_basin[i] >= 0.5 and p in tl_map
+                ]
+                mo_cands.sort(key=lambda x: x[0])
+                cands = [c[1] for c in mo_cands[:3]]
+            if cands:
+                oos_diffs.append(float(oos_ser[tl_map[t0]] - np.nanmean([oos_ser[c] for c in cands])))
+        res_om = paired_sign_flip_test(oos_diffs, n_perm=n_perm, rng=rng)
+        res_om.update({"check": oos_tag, "dataset": "NCEP-1 500 hPa"})
+        verif_rows.append(res_om)
+
     # Non-YRB upstream Plateau-West dipole (25-42N, 70-90E strictly west of YRB vs NE 35-50N, 125-150E)
     DI_non_yrb = detrend_monthly_std_1d(
         _box_mean(Z500, lat_a, lon_a, 35, 50, 125, 150) - _box_mean(Z500, lat_a, lon_a, 25, 42, 70, 90),
@@ -549,7 +647,7 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
         rw.update({"check": tag, "dataset": "NCEP-1 500 hPa"})
         verif_rows.append(rw)
 
-    # NCEP-DOE-2 500 hPa and 200 hPa independent height verification (1979-2025)
+    # NCEP-DOE-2 500 hPa, 200 hPa, and warm-season Huang (2004) EAP850 verification (1979-2025)
     for lev_lbl, fname in [("NCEP-DOE-2 500 hPa", "ncep2_hgt500_asia.nc"), ("NCEP-DOE-2 200 hPa", "ncep2_hgt200_asia.nc")]:
         ds2 = xr.open_dataset(f"{raw_dir}/{fname}").sel(time=slice("1979-01-01", "2025-12-31"))
         z2_raw = ds2["hgt"].squeeze("level", drop=True).values.astype(float)
@@ -571,13 +669,46 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
             res2.update({"check": tag, "dataset": lev_lbl})
             verif_rows.append(res2)
 
-    # NCEP-DOE-2 surface-bounded DIV_ps verification (1979-2025)
+    # NCEP-DOE-2 surface-bounded DIV_ps and Huang (2004) EAP850 verification (1979-2025)
     air2 = xr.open_dataset(f"{raw_dir}/ncep2_air.mon.mean.nc")["air"].sel(time=slice("1979-01-01", "2025-12-31"), lat=lat_a, lon=lon_a)
     rh2 = xr.open_dataset(f"{raw_dir}/ncep2_rhum.mon.mean.nc")["rhum"].sel(time=slice("1979-01-01", "2025-12-31"), lat=lat_a, lon=lon_a)
     u2 = xr.open_dataset(f"{raw_dir}/ncep2_uwnd.mon.mean.nc")["uwnd"].sel(time=slice("1979-01-01", "2025-12-31"), lat=lat_a, lon=lon_a)
     v2 = xr.open_dataset(f"{raw_dir}/ncep2_vwnd.mon.mean.nc")["vwnd"].sel(time=slice("1979-01-01", "2025-12-31"), lat=lat_a, lon=lon_a)
     ps2 = xr.open_dataset(f"{raw_dir}/ncep2_pres.sfc.mon.mean.nc")["pres"].sel(time=slice("1979-01-01", "2025-12-31"))
     ps2_on_25 = ps2.sortby("lat").interp(lat=lat_a, lon=lon_a).values.astype(float) / 100.0
+    from pathlib import Path
+    raw_p = Path(raw_dir)
+    h850_2_file = raw_p / "ncep2_hgt850_asia.nc"
+    if not h850_2_file.exists():
+        h850_2_file = raw_p / "ncep2_hgt.mon.mean.nc"
+    if h850_2_file.exists():
+        h850_2_da = xr.open_dataset(h850_2_file)["hgt"].sel(time=slice("1979-01-01", "2025-12-31"), lat=lat_a, lon=lon_a)
+        if "level" in h850_2_da.dims:
+            h850_2_da = h850_2_da.sel(level=850, drop=True)
+        z850_2 = detrend_monthly_std_3d(h850_2_da.values.astype(float), np.array([p.month for p in pd.PeriodIndex(np.datetime_as_string(h850_2_da.time.values, unit="M"), freq="M")]))
+        tl850_2 = pd.PeriodIndex(np.datetime_as_string(h850_2_da.time.values, unit="M"), freq="M")
+        tl850_2_map = {p: i for i, p in enumerate(tl850_2)}
+        m850_2 = np.array([p.month for p in tl850_2])
+        mask_850_2 = np.nanmean(ps2_on_25, axis=0) >= 850.0
+        eap2_raw = (
+            -0.25 * _box_mean(z850_2, lat_a, lon_a, 15, 25, 115, 140, valid_2d=mask_850_2)
+            + 0.50 * _box_mean(z850_2, lat_a, lon_a, 30, 40, 115, 140, valid_2d=mask_850_2)
+            - 0.25 * _box_mean(z850_2, lat_a, lon_a, 50, 60, 115, 140, valid_2d=mask_850_2)
+        )
+        eap2 = detrend_monthly_std_1d(eap2_raw, m850_2)
+        for tag, sub in [
+            ("Post-1979 All EAP850", events_df[events_df["year"] >= 1979]),
+            ("Post-1979 Flood EAP850", events_df[(events_df["year"] >= 1979) & events_df["trans_month"].between(5, 9)]),
+            ("Post-1979 JJA EAP850", events_df[(events_df["year"] >= 1979) & events_df["trans_month"].isin([6, 7, 8])]),
+        ]:
+            diffs_e2 = [
+                eap2[tl850_2_map[pd.Period(r["wet_start"], freq="M")]]
+                - float(np.mean([eap2[tl850_2_map[p]] for p in _expand_months(r["dry_start"], r["dry_end"])]))
+                for _, r in sub.iterrows()
+            ]
+            re2 = paired_sign_flip_test(diffs_e2, n_perm=n_perm, rng=rng)
+            re2.update({"check": tag, "dataset": "NCEP-DOE-2 850 hPa"})
+            verif_rows.append(re2)
     lv2 = air2.level.values
     lv2 = lv2[(lv2 >= 300) & (lv2 <= 1000)]
     q2 = specific_humidity_from_rh(air2.sel(level=lv2).values.astype(float), rh2.sel(level=lv2).values.astype(float), lv2)
@@ -616,7 +747,7 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
 
     verif_df = pd.DataFrame(verif_rows)
 
-    # Spatial composites, detrended/month-matched 5880 gpm WNPSH, significance stippling, & month-matched W-flux
+    # Spatial composites, detrended/month-matched/ordinary-wet 5880 gpm WNPSH, BH-FDR significance, & W-flux
     b_fl = events_df[events_df["trans_month"].between(5, 9)]
     i_all = [tl_map[pd.Period(r["wet_start"], freq="M")] for _, r in events_df.iterrows()]
     i_fl = [tl_map[pd.Period(r["wet_start"], freq="M")] for _, r in b_fl.iterrows()]
@@ -625,7 +756,6 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
     def _mean_q(arr, idx):
         return np.nanmean(arr[idx], axis=0)
 
-    # Compute detrended h500 restored to the 1991-2020 calendar-month baseline for Fig. 6a WNPSH contours
     yrs_nc = np.array([p.year for p in tl_nc])
     h500_detrend = np.empty_like(h500)
     h500_clim_by_mo = {}
@@ -640,14 +770,28 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
 
     h500_flood_matched = np.mean(h500_detrend[i_fl], axis=0)
     h500_clim_matched = np.mean([h500_clim_by_mo[m] for m in fl_mos], axis=0)
+    ord_pools = ord_wet_flood_pools.get("tol_0.2_nn_onset") or ord_wet_flood_pools.get("tol_0.2_nn_all39", [])
+    h500_ord_wet_flood = np.mean([np.mean(h500_detrend[p_list], axis=0) for p_list in ord_pools], axis=0) if ord_pools else np.full_like(h500_flood_matched, np.nan)
     edge_flood_lon = _ridge_western_edge(h500_flood_matched, lat_a, lon_a, 5880.0)
     edge_clim_lon = _ridge_western_edge(h500_clim_matched, lat_a, lon_a, 5880.0)
+    edge_ord_wet_lon = _ridge_western_edge(h500_ord_wet_flood, lat_a, lon_a, 5880.0)
 
-    # Two-sided one-sample t-test p-value masks on Z500* for stippling in Fig. 6a,b
+    # Pointwise t-test p-values plus Wilks (2016) BH-FDR across plotted East Asian domain
     _, p_z500_fl = stats.ttest_1samp(Z500[i_fl], 0.0, axis=0, nan_policy="omit")
     _, p_z500_all = stats.ttest_1samp(Z500[i_all], 0.0, axis=0, nan_policy="omit")
+    _, p_z850_fl = stats.ttest_1samp(Z850[i_fl], 0.0, axis=0, nan_policy="omit")
+    dom_m = (lat_a[:, None] >= 15.0) & (lat_a[:, None] <= 62.0) & (lon_a[None, :] >= 65.0) & (lon_a[None, :] <= 170.0)
+    q_z500_fl = np.full_like(p_z500_fl, np.nan)
+    q_z500_all = np.full_like(p_z500_all, np.nan)
+    q_z850_fl = np.full_like(p_z850_fl, np.nan)
+    m_fl_ok = dom_m & np.isfinite(p_z500_fl)
+    m_all_ok = dom_m & np.isfinite(p_z500_all)
+    m_850_ok = dom_m & mask_850 & np.isfinite(p_z850_fl)
+    q_z500_fl[m_fl_ok] = bh_fdr(p_z500_fl[m_fl_ok])
+    q_z500_all[m_all_ok] = bh_fdr(p_z500_all[m_all_ok])
+    q_z850_fl[m_850_ok] = bh_fdr(p_z850_fl[m_850_ok])
 
-    # Calendar-month-specific moisture flux anomalies & per-event calendar-month Takaya-Nakamura W-flux
+    # Calendar-month-specific moisture flux anomalies & per-event calendar-month Takaya-Nakamura W-flux (>=25N, |U|>=10 m/s)
     qu_m, qv_m = np.zeros_like(qu_ps), np.zeros_like(qv_ps)
     u200 = uwnd_s.sel(level=200, drop=True).values.astype(float)
     v200 = vwnd_s.sel(level=200, drop=True).values.astype(float)
@@ -663,7 +807,7 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
 
     wx_list, wy_list = [], []
     for i0, mo_e in zip(i_fl, fl_mos):
-        wx_e, wy_e = takaya_nakamura_flux_200(phi200[i0], u200_clim_mo[mo_e], v200_clim_mo[mo_e], lat_a, u_min=8.0)
+        wx_e, wy_e = takaya_nakamura_flux_200(phi200[i0], u200_clim_mo[mo_e], v200_clim_mo[mo_e], lat_a, u_min=10.0, lat_min=25.0)
         wx_list.append(wx_e)
         wy_list.append(wy_e)
     with warnings.catch_warnings():
@@ -671,6 +815,7 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
         wx_200 = np.nanmean(np.stack(wx_list, axis=0), axis=0)
         wy_200 = np.nanmean(np.stack(wy_list, axis=0), axis=0)
     u200_fl_clim = np.nanmean([u200_clim_mo[m] for m in fl_mos], axis=0)
+    z850_fl_mean = np.where(mask_850, np.nanmean(Z850[i_fl], axis=0), np.nan)
 
     fields = {
         "lat": lat_a,
@@ -679,11 +824,18 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
         "Z500_flood": np.nanmean(Z500[i_fl], axis=0),
         "p_Z500_all": p_z500_all,
         "p_Z500_flood": p_z500_fl,
+        "q_Z500_all": q_z500_all,
+        "q_Z500_flood": q_z500_fl,
+        "Z850_flood": z850_fl_mean,
+        "p_Z850_flood": p_z850_fl,
+        "q_Z850_flood": q_z850_fl,
         "Z200_flood": np.nanmean(Z200[i_fl], axis=0),
         "h500_flood": h500_flood_matched,
         "h500_flood_clim": h500_clim_matched,
+        "h500_ord_wet_flood": h500_ord_wet_flood,
         "wnpsh_edge_flood_lon": edge_flood_lon,
         "wnpsh_edge_clim_lon": edge_clim_lon,
+        "wnpsh_edge_ord_wet_lon": edge_ord_wet_lon,
         "qu_anom_all": _mean_q(qu_m, i_all),
         "qv_anom_all": _mean_q(qv_m, i_all),
         "qu_anom_flood": _mean_q(qu_m, i_fl),
@@ -702,22 +854,56 @@ def run_circulation_diagnostics(raw_dir, events_df, spi_basin, spi_periods, mask
     return summary_df, windows_df, controls_df, verif_df, fields
 
 
-def _run_logistic_loocv(x_mat, y_vec):
+def _run_logistic_eval(x_mat, y_vec, n_perm=500, seed=777):
+    """Evaluate LOOCV AUC, 5-fold stratified CV AUC, and permutation AUC p-value."""
     from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import roc_auc_score
+    from sklearn.model_selection import StratifiedKFold
     from sklearn.preprocessing import StandardScaler
 
-    probs = np.zeros(len(y_vec), dtype=float)
-    for i in range(len(y_vec)):
-        train = np.arange(len(y_vec)) != i
+    def _oof_auc(y_arr, folds):
+        probs = np.zeros(len(y_arr), dtype=float)
+        for tr, te in folds:
+            scaler = StandardScaler().fit(x_mat[tr])
+            clf = LogisticRegression(C=0.5, solver="lbfgs", tol=1e-3, max_iter=150).fit(
+                scaler.transform(x_mat[tr]), y_arr[tr]
+            )
+            probs[te] = clf.predict_proba(scaler.transform(x_mat[te]))[:, 1]
+        return float(roc_auc_score(y_arr, probs))
+
+    n = len(y_vec)
+    loo_probs = np.zeros(n, dtype=float)
+    for i in range(n):
+        train = np.arange(n) != i
         scaler = StandardScaler().fit(x_mat[train])
-        clf = LogisticRegression(C=0.5).fit(scaler.transform(x_mat[train]), y_vec[train])
-        probs[i] = float(clf.predict_proba(scaler.transform(x_mat[i : i + 1]))[0, 1])
-    return round(float(roc_auc_score(y_vec, probs)), 3)
+        clf = LogisticRegression(C=0.5, solver="lbfgs", tol=1e-3, max_iter=150).fit(
+            scaler.transform(x_mat[train]), y_vec[train]
+        )
+        loo_probs[i] = float(clf.predict_proba(scaler.transform(x_mat[i : i + 1]))[0, 1])
+    loo_auc = float(roc_auc_score(y_vec, loo_probs))
+
+    n_splits = min(5, int((y_vec == 1).sum()), int((y_vec == 0).sum()))
+    if n_splits >= 2:
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+        folds = list(skf.split(x_mat, y_vec))
+        cv5_auc = _oof_auc(y_vec, folds)
+        rng_p = np.random.default_rng(seed)
+        perm_aucs = np.empty(n_perm, dtype=float)
+        skf_p = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+        for b in range(n_perm):
+            y_perm = rng_p.permutation(y_vec)
+            p_folds = list(skf_p.split(x_mat, y_perm))
+            perm_aucs[b] = _oof_auc(y_perm, p_folds)
+        perm_p = float((np.sum(perm_aucs >= cv5_auc) + 1.0) / (n_perm + 1.0))
+    else:
+        cv5_auc = loo_auc
+        perm_p = np.nan
+
+    return round(loo_auc, 3), round(cv5_auc, 3), round(perm_p, 4)
 
 
-def seasonal_teleconnection_skill(raw_dir, events_df):
-    """Evaluate strictly causal pre-drought-onset seasonal ONI/SOI/NAO skill across annual and seasonal targets."""
+def seasonal_teleconnection_skill(raw_dir, events_df, dry_spells=None, periods=None, spi_basin=None):
+    """Evaluate strictly causal pre-drought-onset ONI/SOI/NAO skill against collision-free drought and annual controls."""
     from pathlib import Path
 
     raw_dir = Path(raw_dir)
@@ -757,14 +943,18 @@ def seasonal_teleconnection_skill(raw_dir, events_df):
             "ONI_MAM": oni.get((mam_y, 4), np.nan),
             "SOI_MAM": float(np.nanmean([soi.get((mam_y, 3), np.nan), soi.get((mam_y, 4), np.nan), soi.get((mam_y, 5), np.nan)])),
             "NAO_MAM": float(np.nanmean([nao.get((mam_y, 3), np.nan), nao.get((mam_y, 4), np.nan), nao.get((mam_y, 5), np.nan)])),
+            "djf_y": djf_y,
+            "mam_y": mam_y,
         }
 
-    # Verify causal ordering on all 39 event-level origins paired against non-event year origins
     ev_rows = []
-    ev_years_all = set()
     ev_years_fl = set()
+    ev_dry_starts = set()
+    ev_all_months = set()
     for _, r in events_df.iterrows():
         ds_p = pd.Period(r["dry_start"], freq="M")
+        ev_dry_starts.add(str(ds_p))
+        ev_all_months.update(_expand_months(r["dry_start"], r["wet_end"]))
         preds = _predictors_before(ds_p.year, ds_p.month)
         preds.update({
             "label": 1,
@@ -774,7 +964,6 @@ def seasonal_teleconnection_skill(raw_dir, events_df):
             "is_flood": int(5 <= int(r["trans_month"]) <= 9),
         })
         ev_rows.append(preds)
-        ev_years_all.add(int(r["year"]))
         if 5 <= int(r["trans_month"]) <= 9:
             ev_years_fl.add(int(r["year"]))
 
@@ -782,21 +971,18 @@ def seasonal_teleconnection_skill(raw_dir, events_df):
     noncol_feats = ["ONI_DJF", "NAO_DJF", "ONI_MAM", "NAO_MAM"]
     out_rows = []
 
+    def _feat_key(row_d):
+        return tuple(round(float(row_d[c]), 6) for c in all_feats)
+
+    pos_keys = {_feat_key(r) for r in ev_rows}
+
     # Model A: Fixed-lag May-Sep Flood-Season Annual Prediction (1961-2025; DJF_y and MAM_y strictly < May_y)
-    # Model B: Strictly Causal Event-vs-NonEvent Pre-Drought Classification (all 39 events vs non-event June baselines)
-    # Model C: Fixed-lag All-Season Annual Year Prediction (predicting transition onset in [Jun_y..May_{y+1}] from DJF_y/MAM_y)
     fl_yr_df = pd.DataFrame([
         {**_predictors_before(yr, 6), "label": 1 if yr in ev_years_fl else 0}
         for yr in range(1961, 2026)
-    ]).dropna().reset_index(drop=True)
+    ]).dropna(subset=all_feats).reset_index(drop=True)
 
-    nonev_jun = [
-        {**_predictors_before(yr, 6), "label": 0, "is_flood": 0}
-        for yr in range(1961, 2026)
-        if yr not in ev_years_all
-    ]
-    ev_all_df = pd.DataFrame(ev_rows + nonev_jun).dropna(subset=all_feats).reset_index(drop=True)
-
+    # Model B: Fixed-lag Hydrological-Year Prediction ([Jun_y..May_{y+1}] from DJF_y/MAM_y)
     ev_jun_after = set()
     for _, r in events_df.iterrows():
         ws = pd.Period(r["wet_start"], freq="M")
@@ -804,16 +990,60 @@ def seasonal_teleconnection_skill(raw_dir, events_df):
     hy_df = pd.DataFrame([
         {**_predictors_before(yr, 6), "label": 1 if yr in ev_jun_after else 0}
         for yr in range(1961, 2026)
-    ]).dropna().reset_index(drop=True)
+    ]).dropna(subset=all_feats).reset_index(drop=True)
 
-    for setup_name, sub_df in [
+    setups = [
         ("Flood_MaySep_Annual_FixedLag", fl_yr_df),
-        ("All39_Events_Causal_PreDry", ev_all_df),
         ("HydroYear_JunMay_FixedLag", hy_df),
-    ]:
+    ]
+
+    # Model C1: Genuine non-transitioning multi-month dry spells (D >= 2 without transition within G=4)
+    if dry_spells is not None and periods is not None:
+        neg_spells = []
+        n_spell_coll = 0
+        for s0, s1 in dry_spells:
+            p0 = periods[s0]
+            if str(p0) in ev_dry_starts:
+                continue
+            pr = _predictors_before(p0.year, p0.month)
+            if _feat_key(pr) in pos_keys:
+                n_spell_coll += 1
+                continue
+            pr.update({"label": 0, "dry_start": str(p0)})
+            neg_spells.append(pr)
+        spells_df = pd.DataFrame(ev_rows + neg_spells).dropna(subset=all_feats).reset_index(drop=True)
+        setups.append(("AllDrySpells_Causal_PreDry", spells_df))
+
+    # Model C2: Collision-free non-DFAA drought months (SPI <= -0.5 outside all 39 DFAA [dry_start..wet_end] runs)
+    if spi_basin is not None and periods is not None:
+        seen_neg_keys = set()
+        neg_dry_months = []
+        n_drymo_coll = 0
+        for idx_t, p in enumerate(periods):
+            if not np.isfinite(spi_basin[idx_t]) or spi_basin[idx_t] > -0.5:
+                continue
+            if p in ev_all_months:
+                continue
+            pr = _predictors_before(p.year, p.month)
+            fk = _feat_key(pr)
+            if fk in pos_keys:
+                n_drymo_coll += 1
+                continue
+            if fk in seen_neg_keys:
+                continue
+            seen_neg_keys.add(fk)
+            pr.update({"label": 0, "dry_month": str(p)})
+            neg_dry_months.append(pr)
+        drymo_df = pd.DataFrame(ev_rows + neg_dry_months).dropna(subset=all_feats).reset_index(drop=True)
+        setups.append(("All39_Events_Causal_PreDry", drymo_df))
+
+    for setup_name, sub_df in setups:
+        pos_fset = {tuple(np.round(r, 6)) for r in sub_df.loc[sub_df["label"] == 1, all_feats].to_numpy()}
+        neg_fset = {tuple(np.round(r, 6)) for r in sub_df.loc[sub_df["label"] == 0, all_feats].to_numpy()}
+        assert len(pos_fset & neg_fset) == 0, f"Duplicate opposite-label features in {setup_name}"
         y_vec = sub_df["label"].to_numpy()
-        auc6 = _run_logistic_loocv(sub_df[all_feats].to_numpy(), y_vec)
-        auc4 = _run_logistic_loocv(sub_df[noncol_feats].to_numpy(), y_vec)
+        loo6, cv5_6, perm_p6 = _run_logistic_eval(sub_df[all_feats].to_numpy(), y_vec)
+        loo4, cv5_4, perm_p4 = _run_logistic_eval(sub_df[noncol_feats].to_numpy(), y_vec)
         pvals = []
         s_rows = []
         for col in all_feats:
@@ -830,8 +1060,12 @@ def seasonal_teleconnection_skill(raw_dir, events_df):
                 "nonevent_mean": round(float(d_no.mean()), 3),
                 "diff": round(float(d_ev.mean() - d_no.mean()), 3),
                 "p_value": round(float(p_t), 4),
-                "loo_auc_6feat": auc6,
-                "loo_auc_4feat_noncol": auc4,
+                "loo_auc_6feat": loo6,
+                "cv5_auc_6feat": cv5_6,
+                "perm_auc_p_6feat": perm_p6,
+                "loo_auc_4feat_noncol": loo4,
+                "cv5_auc_4feat_noncol": cv5_4,
+                "perm_auc_p_4feat_noncol": perm_p4,
             })
         qvals = bh_fdr(pvals)
         for row_d, qv in zip(s_rows, qvals):

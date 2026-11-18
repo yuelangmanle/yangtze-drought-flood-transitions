@@ -1,2 +1,2 @@
 n_cells_eval,n_perm,field_null_type,tau_median,raw_sig_n,raw_sig_frac,fdr_sig_n,min_q_fdr,field_null_mean_tau,field_null_mean_frac,field_null_p95_frac,field_p_value
-748,1000,spatial_seasonal_ar1_h0,0.0077,47,0.0628,0,0.4862,-0.0002,0.0498,0.0749,0.1828
+748,1000,spatial_seasonal_ar1_h0,0.0081,43,0.0575,0,0.8019,-0.0002,0.0498,0.0749,0.2737

@@ -1,5 +1,7 @@
-stratum,n_dfaa,n_ord_wet_pool,dfaa_Q_wet_mean,ord_pool_Q_wet_mean,ord_matched_Q_wet_mean,paired_diff_Q_wet,paired_diff_Q_preTGP,paired_diff_delta_Q,mw_p_unpaired,wilcoxon_p_matched
-All (1961-2024),38,125,0.039,0.356,0.229,-0.19,-0.204,0.484,0.0455,0.2044
-Fw < 1.0,17,43,-0.409,-0.018,0.111,-0.521,-0.571,0.149,0.0471,0.0505
-Fw >= 1.0,21,82,0.402,0.552,0.471,-0.07,-0.058,0.626,0.3486,0.7335
-Flood (May-Sep),15,52,0.208,0.364,0.231,-0.023,-0.009,0.61,0.6356,0.8469
+stratum,era_matched,n_dfaa,n_ord_wet_pool,n_cross_month_fallback,dfaa_Q_wet_mean,ord_pool_Q_wet_mean,ord_matched_Q_wet_mean,paired_diff_Q_wet,Q_wet_ci95_lo,Q_wet_ci95_hi,paired_diff_Q_preTGP,paired_diff_delta_Q,delta_Q_ci95_lo,delta_Q_ci95_hi,paired_diff_delta_Q_sym,mw_p_unpaired,wilcoxon_p_matched,wilcoxon_p_delta_Q,wilcoxon_p_delta_Q_sym
+All (1961-2024),False,38,125,0,0.039,0.356,0.229,-0.19,-0.436,0.055,-0.204,0.484,0.164,0.804,0.677,0.0455,0.2044,0.0057,0.0
+Fw < 1.0,False,17,43,0,-0.409,-0.018,0.111,-0.521,-0.965,-0.077,-0.571,0.149,-0.278,0.575,0.497,0.0471,0.0505,0.5477,0.0174
+Fw >= 1.0,False,21,82,0,0.402,0.552,0.471,-0.07,-0.393,0.253,-0.058,0.626,0.127,1.126,0.692,0.3486,0.7335,0.0113,0.009
+Flood (May-Sep),False,15,52,0,0.208,0.364,0.231,-0.023,-0.368,0.323,-0.009,0.61,-0.002,1.222,0.814,0.6356,0.8469,0.0554,0.0034
+Pre-2003 Era-Matched (1961-2002),True,27,82,0,0.13,0.321,0.226,-0.097,-0.429,0.236,-0.108,0.762,0.44,1.085,0.852,0.2813,0.5944,0.0001,0.0
+Post-2003 Era-Matched (2003-2024),True,11,43,0,-0.184,0.422,0.471,-0.655,-1.114,-0.196,-0.687,-0.392,-0.863,0.079,0.053,0.0482,0.0098,0.083,0.8984

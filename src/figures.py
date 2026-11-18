@@ -115,11 +115,16 @@ def plot_fig1_study_area(mask, clim_df, vectors, out_dir, formats=("png",)):
     if "pr_annual_clim" in vectors:
         pr_clim = np.where(frac > 0, vectors["pr_annual_clim"], np.nan)
         cs = ax.contour(
-            lons, lats, pr_clim, levels=[600, 1000, 1400], colors=["#1D4ED8"], linewidths=0.9, alpha=0.72, zorder=3.6
+            lons, lats, pr_clim, levels=[600, 1000, 1400], colors=["#1D4ED8"], linewidths=0.95, alpha=0.80, zorder=3.6
         )
-        lbls = ax.clabel(cs, fmt="%d mm yr$^{-1}$", fontsize=6.9, colors="#1E3A8A", inline=True, inline_spacing=3)
-        for txt in lbls:
-            txt.set_path_effects(HALO)
+        for lv, segs in zip(cs.levels, cs.allsegs):
+            if not segs:
+                continue
+            seg_main = max(segs, key=len)
+            mid_idx = int(len(seg_main) * (0.45 if lv == 600 else (0.55 if lv == 1000 else 0.72)))
+            lx, ly = seg_main[min(mid_idx, len(seg_main) - 1)]
+            ax.text(lx, ly, f"{int(lv)}", fontsize=7.6, fontweight="bold", color="#1E3A8A",
+                    ha="center", va="center", path_effects=HALO, zorder=6.2)
 
     _draw_rings(ax, vectors["yrb"], facecolor=None, edgecolor="#0F172A", lw=1.4, ls="-", zorder=4.5)
 
@@ -191,24 +196,23 @@ def plot_fig1_study_area(mask, clim_df, vectors, out_dir, formats=("png",)):
     t_med = clim_df["temp_median_c"].to_numpy() if "temp_median_c" in clim_df.columns else clim_df["temp_mean_c"].to_numpy()
 
     colors = [
-        PALETTE["blue"] if 5 <= m <= 9 else (PALETTE["sky"] if m in (3, 4, 10, 11) else PALETTE["slate"])
+        PALETTE["blue"] if 5 <= m <= 9 else (PALETTE["teal"] if m in (3, 4) else (PALETTE["sky"] if m in (10, 11) else PALETTE["slate"]))
         for m in x_mo
     ]
-    ax2.bar(x_mo, mo_med, color=colors, width=0.66, edgecolor="#1E293B", linewidth=0.5, alpha=0.86, zorder=3,
-            label="Basin precip. (median & IQR)")
+    ax2.bar(x_mo, mo_med, color=colors, width=0.66, edgecolor="#1E293B", linewidth=0.5, alpha=0.86, zorder=3)
     ax2.errorbar(x_mo, mo_med, yerr=[np.maximum(mo_med - mo_iqr25, 0.0), np.maximum(mo_iqr75 - mo_med, 0.0)],
                  fmt="none", ecolor="#0F172A", elinewidth=0.95, capsize=2.4, zorder=4)
     ax2.axvspan(4.5, 9.5, color=PALETTE["blue"], alpha=0.07, zorder=1)
     ax2.text(0.67, 0.96, "Flood season (May–Sep)\n41.0% of events (n = 16)", transform=ax2.transAxes,
-             ha="center", va="top", fontsize=7.6, color=PALETTE["navy"], fontweight="bold",
-             bbox=dict(boxstyle="round,pad=0.25", facecolor="#FFFFFF", alpha=0.85, edgecolor="#CBD5E1"))
+             ha="center", va="top", fontsize=7.4, color=PALETTE["navy"], fontweight="bold",
+             bbox=dict(boxstyle="round,pad=0.25", facecolor="#FFFFFF", alpha=0.88, edgecolor="#CBD5E1"))
 
     ax2_t = ax2.twinx()
     ax2_t.spines["top"].set_visible(False)
     ax2_t.spines["right"].set_visible(True)
     ax2_t.spines["right"].set_color(PALETTE["crimson"])
-    ax2_t.plot(x_mo, t_med, color=PALETTE["crimson"], marker="o", ms=4.2, mfc="white", mew=1.2,
-               lw=1.6, zorder=5, label="Basin temp. (median °C)")
+    t_line, = ax2_t.plot(x_mo, t_med, color=PALETTE["crimson"], marker="o", ms=4.2, mfc="white", mew=1.2,
+                         lw=1.6, zorder=5, label="Temp. (median °C)")
     ax2_t.set_ylabel("Basin-Mean Temperature (°C)", color=PALETTE["crimson"])
     ax2_t.tick_params(axis="y", colors=PALETTE["crimson"])
     ax2_t.set_ylim(-2.0, 29.0)
@@ -217,19 +221,24 @@ def plot_fig1_study_area(mask, clim_df, vectors, out_dir, formats=("png",)):
     ax2.set_xticklabels(["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"])
     ax2.set_xlabel("Calendar Month (1961–2025)")
     ax2.set_ylabel("Basin-Mean Precipitation (mm month$^{-1}$)")
-    ax2.set_ylim(0, max(mo_iqr75) * 1.32)
+    ax2.set_ylim(0, max(mo_iqr75) * 1.44)
     ax2.grid(axis="y", ls=":", alpha=0.25, zorder=0)
 
-    h1, l1 = ax2.get_legend_handles_labels()
-    h2, l2 = ax2_t.get_legend_handles_labels()
-    ax2.legend(h1 + h2, l1 + l2, loc="upper left", frameon=True, framealpha=0.92, edgecolor="#CBD5E1", fontsize=7.2)
+    bar_handles = [
+        mpatches.Patch(facecolor=PALETTE["blue"], edgecolor="#1E293B", lw=0.5, label="Flood (May–Sep)"),
+        mpatches.Patch(facecolor=PALETTE["teal"], edgecolor="#1E293B", lw=0.5, label="Spring (Mar–Apr)"),
+        mpatches.Patch(facecolor=PALETTE["sky"], edgecolor="#1E293B", lw=0.5, label="Autumn (Oct–Nov)"),
+        mpatches.Patch(facecolor=PALETTE["slate"], edgecolor="#1E293B", lw=0.5, label="Winter (Dec–Feb)"),
+        t_line,
+    ]
+    ax2.legend(handles=bar_handles, loc="upper left", frameon=True, framealpha=0.93, edgecolor="#CBD5E1", fontsize=6.5)
     ax2.set_title("b", loc="left", fontsize=11.5, fontweight="bold")
 
     _save_fig(fig, out_dir, "Fig1", formats=formats)
 
 
-def plot_fig2_tributary_amplification(trib_df, out_dir, formats=("png",), trib_sum_df=None):
-    """Subbasin masking rays with seasonal stratification, stacked counts, and amplification spread."""
+def plot_fig5_tributary_amplification(trib_df, out_dir, formats=("png",), trib_sum_df=None):
+    """Subbasin masking rays with duration control, ord-wet/null benchmarks, TGP zoning, and spread."""
     fig = plt.figure(figsize=(12.6, 4.7))
     gs = fig.add_gridspec(1, 3, width_ratios=[1.22, 0.68, 0.72], wspace=0.24)
     ax1 = fig.add_subplot(gs[0, 0])
@@ -237,8 +246,8 @@ def plot_fig2_tributary_amplification(trib_df, out_dir, formats=("png",), trib_s
     ax3 = fig.add_subplot(gs[0, 2], sharey=ax2)
 
     fw_b = trib_df["F_w_basin"].to_numpy()
-    fw_t = trib_df["F_w_peak_trib"].to_numpy()
-    ratio = trib_df["spi_amp_ratio"].to_numpy()
+    fw_t = trib_df["F_w_peak_trib_th05"].to_numpy() if "F_w_peak_trib_th05" in trib_df.columns else trib_df["F_w_peak_trib"].to_numpy()
+    ratio = trib_df["spi_amp_ratio_th05"].to_numpy() if "spi_amp_ratio_th05" in trib_df.columns else trib_df["spi_amp_ratio"].to_numpy()
     is_mild = fw_b < 1.0
     is_flood = trib_df["trans_month"].between(5, 9).to_numpy()
 
@@ -255,48 +264,68 @@ def plot_fig2_tributary_amplification(trib_df, out_dir, formats=("png",), trib_s
         ax1.text(lbl_x, mult * lbl_x + 0.08, f"{int(mult)}$\\times$", fontsize=7.2,
                  color="#64748B", rotation=angle, ha="center", va="bottom", path_effects=HALO, zorder=2)
 
-    # Encode season via marker shape (circle = Flood May-Sep; square = Cool/Shoulder) and severity via color
+    # Encode season via marker shape (circle = Flood May-Sep; square = Non-Flood Oct-Apr) and severity via color
     for m_cond, f_cond, col, mk, lbl in [
         (is_mild, is_flood, PALETTE["amber"], "o", f"Mild Flood May–Sep (n={(is_mild & is_flood).sum()})"),
-        (is_mild, ~is_flood, PALETTE["amber"], "s", f"Mild Cool/Sh. Oct–Apr (n={(is_mild & ~is_flood).sum()})"),
+        (is_mild, ~is_flood, PALETTE["amber"], "s", f"Mild Oct–Apr (n={(is_mild & ~is_flood).sum()})"),
         (~is_mild, is_flood, PALETTE["teal"], "o", f"Mod/Sev Flood May–Sep (n={(~is_mild & is_flood).sum()})"),
-        (~is_mild, ~is_flood, PALETTE["teal"], "s", f"Mod/Sev Cool/Sh. Oct–Apr (n={(~is_mild & ~is_flood).sum()})"),
+        (~is_mild, ~is_flood, PALETTE["teal"], "s", f"Mod/Sev Oct–Apr (n={(~is_mild & ~is_flood).sum()})"),
     ]:
         sel = m_cond & f_cond
         ax1.scatter(fw_b[sel], fw_t[sel], c=col, s=54, marker=mk, edgecolors="#1E293B", lw=0.7, label=lbl, zorder=4)
 
-    highlights = trib_df.sort_values("F_w_peak_trib", ascending=False).head(2).index.tolist()
-    mild_top = trib_df[is_mild].sort_values("spi_amp_ratio", ascending=False).head(2).index.tolist()
+    fw_col = "F_w_peak_trib_th05" if "F_w_peak_trib_th05" in trib_df.columns else "F_w_peak_trib"
+    rat_col = "spi_amp_ratio_th05" if "spi_amp_ratio_th05" in trib_df.columns else "spi_amp_ratio"
+    highlights = trib_df.sort_values(fw_col, ascending=False).head(2).index.tolist()
+    mild_top = trib_df[is_mild].sort_values(rat_col, ascending=False).head(2).index.tolist()
     offsets = [(10, -14), (-14, 16), (10, 6), (20, -6)]
     for idx_pos, idx in enumerate(highlights + mild_top):
         row = trib_df.loc[idx]
         dx, dy = offsets[idx_pos % len(offsets)]
         ax1.annotate(
             f"{row['wet_start']} ({row['peak_tributary']})",
-            (row["F_w_basin"], row["F_w_peak_trib"]),
+            (row["F_w_basin"], row[fw_col]),
             xytext=(dx, dy), textcoords="offset points", fontsize=7.5, color="#1E293B",
             arrowprops=dict(arrowstyle="-", color="#64748B", lw=0.6), zorder=6,
         )
 
     _, p_mw = stats.mannwhitneyu(ratio[is_mild], ratio[~is_mild], alternative="two-sided")
-    fl_mm_med = float(trib_df.loc[is_flood, "mm_excess_ratio"].median())
-    cool_mm_med = float(trib_df.loc[~is_flood, "mm_excess_ratio"].median())
+    is_w1 = trib_df["W"].to_numpy() == 1 if "W" in trib_df.columns else np.ones(len(trib_df), dtype=bool)
+    rs_w1, p_w1 = stats.spearmanr(fw_b[is_w1], fw_t[is_w1]) if is_w1.sum() >= 6 else (np.nan, np.nan)
     rs_lvl, p_lvl = stats.spearmanr(fw_b, fw_t)
 
+    if trib_sum_df is not None and not trib_sum_df.empty:
+        all_row = trib_sum_df[trib_sum_df["stratum"] == "All (1961-2025)"].iloc[0]
+        m_row = trib_sum_df[trib_sum_df["stratum"] == "Mild (F_w < 1.0)"].iloc[0]
+        s_row = trib_sum_df[trib_sum_df["stratum"] == "Mod/Sev (F_w >= 1.0)"].iloc[0]
+        ord_r = trib_sum_df[trib_sum_df["stratum"] == "Benchmark: OrdWet All"]
+        mvn_r = trib_sum_df[trib_sum_df["stratum"].str.startswith("Benchmark: 8x8 MVN Null")]
+        b_dfaa = float(all_row["loglog_slope"])
+        b_int = float(all_row["intensity_loglog_slope"])
+        b_ord = float(ord_r["loglog_slope"].iloc[0]) if not ord_r.empty and pd.notna(ord_r["loglog_slope"].iloc[0]) else np.nan
+        b_mvn = float(mvn_r["loglog_slope"].iloc[0]) if not mvn_r.empty and pd.notna(mvn_r["loglog_slope"].iloc[0]) else np.nan
+        bench_lines = [
+            f"Uncoupled SPI ratio: {float(m_row['spi_ratio_median']):.2f}$\\times$ vs. {float(s_row['spi_ratio_median']):.2f}$\\times$ (MW $p$={float(all_row['mw_spi_mild_vs_sev_p']):.2e})",
+            f"Fixed $W=1$ ($n$={int(is_w1.sum())}): $r_s$={float(all_row['w1_level_rs']):+.2f} ($p$={float(all_row['w1_level_p']):.2f}) | All $r_s$={float(all_row['level_spearman_rs']):+.2f} ($p$={float(all_row['level_spearman_p']):.2e})",
+            f"Slope $\\beta$: DFAA {b_dfaa:.2f} (int. {b_int:.2f}) | OrdWet {b_ord:.2f} | MVN {b_mvn:.2f}",
+        ]
+    else:
+        bench_lines = [
+            f"Uncoupled SPI ratio: {np.median(ratio[is_mild]):.2f}$\\times$ vs. {np.median(ratio[~is_mild]):.2f}$\\times$ (MW $p$={p_mw:.2e})",
+            f"Fixed $W=1$ ($n$={is_w1.sum()}): $r_s$={rs_w1:+.2f} ($p$={p_w1:.2f}) | All $r_s$={rs_lvl:+.2f} ($p$={p_lvl:.2e})",
+        ]
+
     ax1.set_xlim(0.3, fw_b.max() * 1.16)
-    ax1.set_ylim(0.5, fw_t.max() * 1.18)
+    ax1.set_ylim(0.5, fw_t.max() * 1.22)
     ax1.set_xlabel("Basin-Mean Wet Severity $F_w$ (SPI-1 sum)")
     ax1.set_ylabel("Peak Tributary Wet Severity $F_w$ (SPI-1 sum)")
-    ax1.legend(loc="lower right", frameon=True, framealpha=0.94, edgecolor="#CBD5E1", fontsize=6.6)
-    ax1.text(0.03, 0.96,
-             f"SPI ratio: {np.median(ratio[is_mild]):.2f}$\\times$ ($F_w<1$) vs. {np.median(ratio[~is_mild]):.2f}$\\times$ ($F_w\\geq 1$; MW $p$={p_mw:.1e})\n"
-             f"Physical mm ratio: Flood {fl_mm_med:.2f}$\\times$ vs. Cool {cool_mm_med:.2f}$\\times$\n"
-             f"Uncoupled level corr.: $r_s$ = {rs_lvl:+.2f} ($p$={p_lvl:.1e})",
-             transform=ax1.transAxes, va="top", fontsize=6.9,
-             bbox=dict(boxstyle="round,pad=0.30", facecolor="#F8FAFC", edgecolor="#CBD5E1"))
+    ax1.legend(loc="lower right", frameon=True, framealpha=0.94, edgecolor="#CBD5E1", fontsize=6.5)
+    ax1.text(0.03, 0.96, "\n".join(bench_lines),
+             transform=ax1.transAxes, va="top", fontsize=6.45,
+             bbox=dict(boxstyle="round,pad=0.28", facecolor="#F8FAFC", edgecolor="#CBD5E1"))
     ax1.set_title("a", loc="left", fontsize=11.5, fontweight="bold")
 
-    # Panel (b): Stacked event counts (Mild vs Mod/Sev) by tributary
+    # Panel (b): Stacked event counts (Mild vs Mod/Sev) split upstream vs downstream of TGP
     order = ["Poyang", "Dongting", "Hanjiang", "Wujiang", "Jialing", "Min-Tuo", "Yalong"]
     mild_counts = [int(((trib_df["peak_tributary"] == t) & (trib_df["F_w_basin"] < 1.0)).sum()) for t in order]
     sev_counts = [int(((trib_df["peak_tributary"] == t) & (trib_df["F_w_basin"] >= 1.0)).sum()) for t in order]
@@ -310,9 +339,14 @@ def plot_fig2_tributary_amplification(trib_df, out_dir, formats=("png",), trib_s
         tot = mc + sc
         ax2.text(tot + 0.25, y0, str(tot), va="center", fontsize=8.3, fontweight="bold", color="#0F172A")
 
+    ax2.axhline(2.5, color="#64748B", ls="--", lw=0.95, zorder=2)
+    xmax_b = max(m + s for m, s in zip(mild_counts, sev_counts)) + 3.2
+    ax2.text(xmax_b - 0.2, 2.38, "TGP Downstream ↓", ha="right", va="top", fontsize=6.7, color="#334155", style="italic")
+    ax2.text(xmax_b - 0.2, 2.62, "TGP Upstream ↑", ha="right", va="bottom", fontsize=6.7, color="#334155", style="italic")
+
     ax2.set_yticks(y_idx)
     ax2.set_yticklabels(order, fontweight="medium")
-    ax2.set_xlim(0, max(m + s for m, s in zip(mild_counts, sev_counts)) + 2.8)
+    ax2.set_xlim(0, xmax_b)
     ax2.grid(axis="x", ls=":", alpha=0.25, zorder=0)
     ax2.set_xlabel("Peak Event Count (Total = 39)")
     ax2.legend(loc="upper right", frameon=True, framealpha=0.93, edgecolor="#CBD5E1", fontsize=7.0)
@@ -320,11 +354,12 @@ def plot_fig2_tributary_amplification(trib_df, out_dir, formats=("png",), trib_s
 
     # Panel (c): Amplification ratio distribution per peak tributary
     rng_j = np.random.default_rng(42)
+    ax3.axhline(2.5, color="#64748B", ls="--", lw=0.95, zorder=2)
     ax3.axvline(1.0, color="#64748B", ls="--", lw=1.0, zorder=1)
     ax3.axvline(np.median(ratio), color=PALETTE["navy"], ls=":", lw=1.0, zorder=1)
     for y0, tname in enumerate(order):
         sub_t = trib_df[trib_df["peak_tributary"] == tname]
-        vals = sub_t["spi_amp_ratio"].to_numpy()
+        vals = sub_t[rat_col].to_numpy()
         if len(vals) >= 3:
             ax3.boxplot(
                 [vals], positions=[y0], vert=False, widths=0.42, patch_artist=True, showfliers=False,
@@ -347,10 +382,10 @@ def plot_fig2_tributary_amplification(trib_df, out_dir, formats=("png",), trib_s
     ax3.set_xlabel("SPI Amplification ($F_{w,\\mathrm{trib}} / F_{w,\\mathrm{basin}}$)")
     ax3.set_title("c", loc="left", fontsize=11.5, fontweight="bold")
 
-    _save_fig(fig, out_dir, "Fig2", formats=formats)
+    _save_fig(fig, out_dir, "Fig5", formats=formats)
 
 
-def plot_fig3_chronology_and_seasonality(events_df, out_dir, formats=("png",)):
+def plot_fig2_chronology_and_seasonality(events_df, out_dir, formats=("png",)):
     """Bidirectional event chronology with 11-yr rolling frequency ribbon and 12-month polar rose."""
     fig = plt.figure(figsize=(12.2, 4.7))
     gs = fig.add_gridspec(1, 2, width_ratios=[1.48, 1.0], wspace=0.20)
@@ -436,7 +471,7 @@ def plot_fig3_chronology_and_seasonality(events_df, out_dir, formats=("png",)):
     thetas = np.deg2rad(np.arange(12) * 30.0 + 15.0)
     width = np.deg2rad(25.0)
     m_cols = [
-        PALETTE["blue"] if 5 <= m <= 9 else (PALETTE["slate"] if m in (12, 1, 2) else PALETTE["sky"])
+        PALETTE["blue"] if 5 <= m <= 9 else (PALETTE["teal"] if m in (3, 4) else (PALETTE["sky"] if m in (10, 11) else PALETTE["slate"]))
         for m in range(1, 13)
     ]
 
@@ -448,8 +483,8 @@ def plot_fig3_chronology_and_seasonality(events_df, out_dir, formats=("png",)):
 
     arc_cfg = [
         (4.0 * 30.0, 9.0 * 30.0, PALETTE["blue"]),
+        (2.0 * 30.0, 4.0 * 30.0, PALETTE["teal"]),
         (9.0 * 30.0, 11.0 * 30.0, PALETTE["sky"]),
-        (2.0 * 30.0, 4.0 * 30.0, PALETTE["sky"]),
         (11.0 * 30.0, 14.0 * 30.0, PALETTE["slate"]),
     ]
     for d0, d1, col in arc_cfg:
@@ -468,16 +503,17 @@ def plot_fig3_chronology_and_seasonality(events_df, out_dir, formats=("png",)):
 
     leg_b = [
         mpatches.Patch(facecolor=PALETTE["blue"], edgecolor="#1E293B", lw=0.5, label=f"Flood May–Sep (n = {int(events_df['trans_month'].between(5,9).sum())}, {100*events_df['trans_month'].between(5,9).mean():.1f}%)"),
+        mpatches.Patch(facecolor=PALETTE["teal"], edgecolor="#1E293B", lw=0.5, label=f"Spring Mar–Apr (n = {int(events_df['trans_month'].isin([3,4]).sum())}, {100*events_df['trans_month'].isin([3,4]).mean():.1f}%)"),
+        mpatches.Patch(facecolor=PALETTE["sky"], edgecolor="#1E293B", lw=0.5, label=f"Autumn Oct–Nov (n = {int(events_df['trans_month'].isin([10,11]).sum())}, {100*events_df['trans_month'].isin([10,11]).mean():.1f}%)"),
         mpatches.Patch(facecolor=PALETTE["slate"], edgecolor="#1E293B", lw=0.5, label=f"Winter Dec–Feb (n = {int(events_df['trans_month'].isin([12,1,2]).sum())}, {100*events_df['trans_month'].isin([12,1,2]).mean():.1f}%)"),
-        mpatches.Patch(facecolor=PALETTE["sky"], edgecolor="#1E293B", lw=0.5, label=f"Shoulder Mar–Apr/Oct–Nov (n = {int((~events_df['trans_month'].isin([5,6,7,8,9,12,1,2])).sum())}, {100*(~events_df['trans_month'].isin([5,6,7,8,9,12,1,2])).mean():.1f}%)"),
     ]
-    ax2.legend(handles=leg_b, loc="upper center", bbox_to_anchor=(0.5, -0.10),
-               frameon=True, framealpha=0.94, edgecolor="#CBD5E1", fontsize=7.3, ncol=1)
+    ax2.legend(handles=leg_b, loc="upper center", bbox_to_anchor=(0.5, -0.09),
+               frameon=True, framealpha=0.94, edgecolor="#CBD5E1", fontsize=6.9, ncol=2)
 
-    _save_fig(fig, out_dir, "Fig3", formats=formats)
+    _save_fig(fig, out_dir, "Fig2", formats=formats)
 
 
-def plot_fig4_dependence_and_spatial(events_df, dep_stats, marg_df, grid_df, grid_summary, mask, vectors, out_dir, formats=("png",)):
+def plot_fig3_dependence_and_spatial(events_df, dep_stats, marg_df, grid_df, grid_summary, mask, vectors, out_dir, formats=("png",)):
     """Joint marginal-density/quantile plot for S_d vs F_w plus 748-grid spatial tau with p < 0.05 markers."""
     fig = plt.figure(figsize=(12.4, 4.9))
     gs = fig.add_gridspec(1, 2, width_ratios=[1.05, 1.32], wspace=0.22)
@@ -493,7 +529,7 @@ def plot_fig4_dependence_and_spatial(events_df, dep_stats, marg_df, grid_df, gri
 
     ax_main.scatter(sd[fl], fw[fl], c=PALETTE["blue"], s=52, edgecolors="#1E293B", lw=0.65, label=f"Flood May–Sep (n = {fl.sum()})", zorder=4)
     ax_main.scatter(sd[~fl], fw[~fl], c=PALETTE["slate"], s=48, marker="s", alpha=0.84, edgecolors="#1E293B", lw=0.65,
-                    label=f"Cool / Shoulder (n = {(~fl).sum()})", zorder=4)
+                    label=f"Non-Flood Oct–Apr (n = {(~fl).sum()})", zorder=4)
 
     xs = np.linspace(sd.min() * 0.95, sd.max() * 1.03, 120)
     X_fit = sm.add_constant(sd)
@@ -589,10 +625,10 @@ def plot_fig4_dependence_and_spatial(events_df, dep_stats, marg_df, grid_df, gri
     ax2.set_ylabel("Latitude (°N)")
     ax2.set_title("b", loc="left", fontsize=11.5, fontweight="bold")
 
-    _save_fig(fig, out_dir, "Fig4", formats=formats)
+    _save_fig(fig, out_dir, "Fig3", formats=formats)
 
 
-def plot_fig5_sensitivity_and_runoff(schemes_df, idx_rob_df, events_df, datong_df, out_dir, formats=("png",)):
+def plot_fig4_sensitivity_and_runoff(schemes_df, idx_rob_df, events_df, datong_df, out_dir, formats=("png",)):
     """36-scheme matrix, index-bridge forest plot with Kendall-tau MDE, and seasonally marked Datong runoff."""
     fig = plt.figure(figsize=(12.6, 5.2))
     gs = fig.add_gridspec(1, 2, width_ratios=[1.05, 1.12], wspace=0.26)
@@ -664,12 +700,12 @@ def plot_fig5_sensitivity_and_runoff(schemes_df, idx_rob_df, events_df, datong_d
         col_pt = PALETTE["red"] if is_base else PALETTE["navy"]
         ax_fp.errorbar(tv, y_pos, xerr=[[tv - lo], [hi - tv]], fmt="o" if not is_base else "D",
                        color=col_pt, ecolor=col_pt, elinewidth=1.4, capsize=3.0, ms=5.6, zorder=4)
-        ax_fp.text(0.42, y_pos, f"$\\tau$={tv:+.3f} (p={row['p_value']:.2f}, MDE$\\pm${mde_t:.2f})",
-                   va="center", ha="left", fontsize=7.0, color="#1E293B")
+        ax_fp.text(0.46, y_pos, f"$\\tau$={tv:+.3f} (p={row['p_value']:.2f}, MDE$\\pm${mde_t:.2f})",
+                   va="center", ha="left", fontsize=6.9, color="#1E293B")
 
     ax_fp.set_yticks(y_fp)
     ax_fp.set_yticklabels([f"{r['index']} (n={int(r['n_events'])})" for _, r in idx_rob_df.iterrows()], fontsize=7.5)
-    ax_fp.set_xlim(-0.42, 0.92)
+    ax_fp.set_xlim(-0.42, 0.99)
     ax_fp.set_ylim(-0.65, len(idx_rob_df) + 0.15)
     ax_fp.set_xticks([-0.4, -0.2, 0.0, 0.2, 0.4])
     ax_fp.set_xlabel("Kendall $\\tau$ ($S_d$ vs. $F_w$, 95% Bootstrap CI; gray = $\\tau$ 80%-MDE)")
@@ -737,11 +773,11 @@ def plot_fig5_sensitivity_and_runoff(schemes_df, idx_rob_df, events_df, datong_d
     ax2.legend(loc="upper left", frameon=True, framealpha=0.93, edgecolor="#CBD5E1", fontsize=6.7)
     ax2.set_title("b", loc="left", fontsize=11.5, fontweight="bold")
 
-    _save_fig(fig, out_dir, "Fig5", formats=formats)
+    _save_fig(fig, out_dir, "Fig4", formats=formats)
 
 
 def plot_fig6_circulation_composites(fields, windows_df, vectors, mask, circ_summary, controls_df, out_dir, formats=("png",)):
-    """Detrended 500 hPa composites with stippling, month-matched WNPSH contours, separate lag bands, and t_w0."""
+    """Detrended 500 hPa composites, pointwise vs Wilks BH-FDR markers, WNPSH contours, and lag trajectories."""
     lats_nc, lons_nc = fields["lat"], fields["lon"]
     fig = plt.figure(figsize=(12.0, 8.3))
     gs = fig.add_gridspec(2, 2, hspace=0.28, wspace=0.18, height_ratios=[1.15, 0.9])
@@ -751,26 +787,41 @@ def plot_fig6_circulation_composites(fields, windows_df, vectors, mask, circ_sum
 
     edge_c = fields.get("wnpsh_edge_clim_lon", 142.5)
     edge_f = fields.get("wnpsh_edge_flood_lon", 165.0)
-    if isinstance(edge_c, np.ndarray):
-        edge_c = float(edge_c.item())
-    if isinstance(edge_f, np.ndarray):
-        edge_f = float(edge_f.item())
+    edge_o = fields.get("wnpsh_edge_ord_wet_lon", np.nan)
+    for arr_name in ("edge_c", "edge_f", "edge_o"):
+        val_e = locals()[arr_name]
+        if isinstance(val_e, np.ndarray):
+            if arr_name == "edge_c":
+                edge_c = float(val_e.item())
+            elif arr_name == "edge_f":
+                edge_f = float(val_e.item())
+            else:
+                edge_o = float(val_e.item())
 
-    for col_idx, (panel_lbl, badge_txt, z_fld, p_fld, qu_fld, qv_fld, draw_5880) in enumerate([
-        ("a", "May–Sep flood (n = 16)", fields["Z500_flood"], fields.get("p_Z500_flood"), fields["qu_anom_flood"], fields["qv_anom_flood"], True),
-        ("b", "All events (n = 39)", fields["Z500_all"], fields.get("p_Z500_all"), fields["qu_anom_all"], fields["qv_anom_all"], False),
+    for col_idx, (panel_lbl, badge_txt, z_fld, p_fld, q_fld, qu_fld, qv_fld, draw_5880) in enumerate([
+        ("a", "May–Sep flood (n = 16)", fields["Z500_flood"], fields.get("p_Z500_flood"), fields.get("q_Z500_flood"), fields["qu_anom_flood"], fields["qv_anom_flood"], True),
+        ("b", "All events (n = 39)", fields["Z500_all"], fields.get("p_Z500_all"), fields.get("q_Z500_all"), fields["qu_anom_all"], fields["qv_anom_all"], False),
     ]):
         ax = fig.add_subplot(gs[0, col_idx])
         cf = ax.contourf(lons_nc, lats_nc, z_fld, levels=np.linspace(-1.2, 1.2, 13), cmap="RdBu_r", norm=norm, extend="both", zorder=1)
+        dom_ok = (lats_nc[:, None] >= ylim[0]) & (lats_nc[:, None] <= ylim[1]) & (lons_nc[None, :] >= xlim[0]) & (lons_nc[None, :] <= xlim[1])
         if p_fld is not None:
-            sig_iy, sig_ix = np.where((p_fld < 0.05) & (lats_nc[:, None] >= ylim[0]) & (lats_nc[:, None] <= ylim[1]) & (lons_nc[None, :] >= xlim[0]) & (lons_nc[None, :] <= xlim[1]))
-            ax.scatter(lons_nc[sig_ix], lats_nc[sig_iy], s=4.0, c="#0F172A", marker=".", alpha=0.55, zorder=2.5)
+            sig_iy, sig_ix = np.where((p_fld < 0.05) & dom_ok)
+            ax.scatter(lons_nc[sig_ix], lats_nc[sig_iy], s=4.5, c="#334155", marker=".", alpha=0.48, zorder=2.4)
+        if q_fld is not None:
+            fdr_iy, fdr_ix = np.where((q_fld < 0.05) & dom_ok)
+            if len(fdr_iy) > 0:
+                ax.scatter(lons_nc[fdr_ix], lats_nc[fdr_iy], s=18, c="#0F172A", marker="x", linewidths=0.95, zorder=2.8)
 
         _draw_coastlines(ax, vectors["coast"], xlim, ylim, color="#475569", lw=0.65, zorder=2)
         _draw_rings(ax, vectors["yrb"], facecolor=None, edgecolor="#111827", lw=1.15, zorder=4)
-        ax.text(0.025, 0.96, badge_txt, transform=ax.transAxes, va="top", ha="left", fontsize=7.6,
+        n_raw_sig = int(np.sum((p_fld < 0.05) & dom_ok)) if p_fld is not None else 0
+        n_fdr_sig = int(np.sum((q_fld < 0.05) & dom_ok)) if q_fld is not None else 0
+        n_dom = int(np.sum(dom_ok))
+        ax.text(0.025, 0.96, f"{badge_txt}\npt p<0.05 (·): {n_raw_sig}/{n_dom}; FDR q<0.05 (×): {n_fdr_sig}/{n_dom}",
+                transform=ax.transAxes, va="top", ha="left", fontsize=6.7,
                 fontweight="bold", color="#0F172A",
-                bbox=dict(boxstyle="round,pad=0.22", facecolor="#FFFFFF", alpha=0.86, edgecolor="#CBD5E1"), zorder=6)
+                bbox=dict(boxstyle="round,pad=0.22", facecolor="#FFFFFF", alpha=0.88, edgecolor="#CBD5E1"), zorder=6)
 
         ax.add_patch(mpatches.Rectangle((125, 35), 25, 15, fill=False, edgecolor="#7F1D1D", lw=1.3, ls="-", zorder=5))
         ax.add_patch(mpatches.Rectangle((90, 25), 20, 17, fill=False, edgecolor="#1E3A8A", lw=1.3, ls="-", zorder=5))
@@ -781,11 +832,17 @@ def plot_fig6_circulation_composites(fields, windows_df, vectors, mask, circ_sum
 
         if draw_5880:
             ax.contour(lons_nc, lats_nc, fields["h500_flood_clim"], levels=[5880], colors=["#0F766E"], linewidths=[1.35], linestyles=["--"], zorder=5)
+            if "h500_ord_wet_flood" in fields and np.isfinite(fields["h500_ord_wet_flood"]).any():
+                ax.contour(lons_nc, lats_nc, fields["h500_ord_wet_flood"], levels=[5880], colors=["#D97706"], linewidths=[1.45], linestyles=["-."], zorder=5)
             ax.contour(lons_nc, lats_nc, fields["h500_flood"], levels=[5880], colors=["#991B1B"], linewidths=[1.6], linestyles=["-"], zorder=5)
             c_lbl = f"{edge_c:.1f}°E" if np.isfinite(edge_c) else "east"
+            o_lbl = f"{edge_o:.1f}°E" if np.isfinite(edge_o) else "n/a"
             f_lbl = f"{edge_f:.1f}°E" if np.isfinite(edge_f) else ">170°E"
-            ax.text(135.5, 16.5, f"5880 gpm (detrended):\nClim ({c_lbl})\nTrans ({f_lbl})", fontsize=6.8, color="#7F1D1D",
-                    bbox=dict(boxstyle="round,pad=0.22", facecolor="#FFFFFF", alpha=0.88, edgecolor="#CBD5E1"), ha="left", zorder=6)
+            ax.text(66.8, 16.5,
+                    f"5880 gpm (detrended):\n— DFAA Flood ({f_lbl})\n-·- OrdWet Ctrl ({o_lbl})\n-- Clim 91–20 ({c_lbl})",
+                    fontsize=6.5, color="#1E293B",
+                    bbox=dict(boxstyle="round,pad=0.22", facecolor="#FFFFFF", alpha=0.90, edgecolor="#CBD5E1"),
+                    ha="left", va="bottom", zorder=6)
 
         q_step = 2
         qv_plot = ax.quiver(lons_nc[::q_step], lats_nc[::q_step], qu_fld[::q_step, ::q_step], qv_fld[::q_step, ::q_step],
@@ -872,10 +929,12 @@ def plot_esm_fig1_wave_flux(fields, vectors, mask, out_dir, formats=("png",)):
 
     wx = fields["wx_200_flood"].copy()
     wy = fields["wy_200_flood"].copy()
-    lat_mask = np.abs(lats_nc)[:, None] < 20.0
+    lat_mask = np.abs(lats_nc)[:, None] < 25.0
+    u_mask = np.hypot(fields["u200_clim_flood"], 0.0) < 10.0
     mag = np.hypot(wx, wy)
-    wx = np.where(lat_mask | (mag < 0.08), np.nan, wx)
-    wy = np.where(lat_mask | (mag < 0.08), np.nan, wy)
+    bad_w = lat_mask | u_mask | (mag < 0.08)
+    wx = np.where(bad_w, np.nan, wx)
+    wy = np.where(bad_w, np.nan, wy)
 
     step = 2
     qv = ax.quiver(lons_nc[::step], lats_nc[::step], wx[::step, ::step], wy[::step, ::step],

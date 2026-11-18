@@ -1,11 +1,11 @@
 const FIGURE_CAPTIONS = {
-  Fig1: "Figure 1. Yangtze River Basin subregions (Upper, Middle, and Lower catchments), seven fractional HydroBASINS Level-6 tributaries, hydrometric infrastructure (Three Gorges Dam at Yichang; Datong mainstem gauge), and 1961–2025 monthly precipitation medians & IQRs paired with median temperature highlighting May–Sep flood-season onset prevalence (41.0%, n = 16).",
-  Fig2: "Figure 2. Comparison of basin-mean F_w versus synchronous peak tributary F_w across 39 events coded by severity and season. Mild whole-basin wet recoveries (F_w < 1.0) exhibit a median tributary SPI amplification of 1.84x vs. 1.24x for F_w >= 1.0 (MW p = 1.8e-4), uncoupled level r_s = +0.689 (p = 1.0e-6), and a 3.29x median physical rainfall excess ratio (14.23 km^3).",
-  Fig3: "Figure 3. (a) Complete 1961–2025 chronology of basin-wide SPI-1 transitions showing 11-yr centered transition rates alongside preceding drought (-S_d) and subsequent wet (+F_w) severities (maximum jump J_w = 3.02 in 1989-01). (b) Monthly transition onset distribution across Flood (41.0%), Winter (33.3%), and Shoulder (25.6%).",
-  Fig4: "Figure 4. (a) Absence of statistically detectable S_d vs. F_w scaling at whole-basin scale (n = 39, tau = -0.139, p = 0.213; 80%-power MDE |tau| = 0.313, |r| = 0.436; Gamma best marginals; Q50/Q90 slopes non-significant). (b) Grid-cell Kendall tau across 748 CRU cells (median +0.008; 47/748 nominal p < 0.05 vs. seasonal AR(1) field null P95 = 7.5%, field p = 0.183; 0/748 BH-FDR q < 0.05).",
-  Fig5: "Figure 5. (a) Sensitivity matrix across 36 definition schemes and forest-plot comparison across SPI-1, SPI-3, Penman–Monteith and Thornthwaite SPEI-1/3, and 1-month bridging with per-sample Kendall tau 80%-MDE bands. (b) Datong mainstem wet-spell discharge anomalies stratified by basin F_w, season (filled Flood vs. open Cool), and regulation eras (1961–2024).",
-  Fig6: "Figure 6. (a) Detrended 500 hPa geopotential height anomalies (Z_500, stippling p < 0.05), p_s-bounded moisture transport vectors (Q'), and detrended month-matched 5880 gpm WNPSH edges (135.0 deg E climatology vs. 132.5 deg E transitions) for May–Sep flood transitions (n = 16). (b) All-event composite (n = 39). (c–d) Window trajectories [t_w0-3 .. t_w0+1] for DIV_ps and DI500 with separate n = 16 and n = 39 climatological 5–95% bands.",
-  ESM_Fig1: "Figure S1. 200 hPa geopotential height anomalies (shading), month-matched May–Sep 25 and 30 m/s upper-tropospheric jet core contours (purple), and horizontal Takaya–Nakamura (2001) wave-activity flux vectors W (|W| >= 0.08 m^2 s^-2 north of 20 deg N; reference 1.0 m^2 s^-2) across East Asia during May–Sep flood transitions (n = 16)."
+  Fig1: "Figure 1. Yangtze River Basin subregions (Upper, Middle, and Lower catchments), seven fractional HydroBASINS Level-6 tributaries, hydrometric infrastructure (Three Gorges Project at Yichang; Datong mainstem gauge), annual precipitation isohyets (600, 1000, 1400 mm/yr), and 1961–2025 monthly precipitation medians & IQRs colored across Flood (May–Sep), Spring (Mar–Apr), Autumn (Oct–Nov), and Winter (Dec–Feb) regimes paired with median temperature.",
+  Fig2: "Figure 2. (a) Complete 1961–2025 chronology of basin-wide SPI-1 transitions showing 11-yr centered transition rates alongside preceding drought (-S_d) and subsequent wet (+F_w) severities relative to 2003 TGP and 2013 mega-cascade markers (maximum jump J_w = 3.02 in 1989-01). (b) Polar onset distribution disaggregated across Flood (41.0%), Spring (5.1%), Autumn (20.5%), and Winter (33.3%).",
+  Fig3: "Figure 3. (a) Absence of statistically detectable S_d vs. F_w scaling at whole-basin scale (n = 39, tau = -0.139, p = 0.213; 80%-power MDE |tau| = 0.313, |r| = 0.436; Gamma best marginals; Q50/Q90 slopes non-significant). (b) Grid-cell Kendall tau across 748 CRU cells (median +0.008; 43/748 nominal p < 0.05 vs. seasonal AR(1) field null P95 = 7.5%, field p = 0.274; 0/748 BH-FDR q < 0.05).",
+  Fig4: "Figure 4. (a) Deduplicated sensitivity matrix across 36 core threshold combinations and forest-plot comparison across SPI-1, SPI-3, Penman–Monteith and Thornthwaite SPEI-1/3, and 1-month bridging with per-sample Kendall tau 80%-MDE bands. (b) Datong mainstem wet-spell discharge anomalies (1961–2024, n = 38) stratified by basin F_w, season (filled Flood vs. open Oct–Apr), and regulation eras.",
+  Fig5: "Figure 5. (a) Synchronous peak tributary wet severity (F_w,peak, SPI >= +0.5) versus basin F_w coded by severity (F_w < 1.0 vs. F_w >= 1.0) and season, alongside W = 1 duration control (r_s = +0.201, p = 0.305), intensity slope (beta = 0.25), ordinary non-DFAA wet benchmark (beta = 0.67), and 8x8 MVN Gaussian spatial null (beta = 0.61). (b) Peak-tributary event counts upstream vs. downstream of Three Gorges Dam (11 Up / 28 Dn). (c) Tributary-to-basin SPI ratio distributions (1.43x overall median; physical excess 3.29x, 14.23 km^3).",
+  Fig6: "Figure 6. (a) Detrended 500 hPa geopotential height anomalies (Z_500, pointwise p < 0.05 dots 57/817 vs. Wilks BH-FDR crosses 0/817), p_s-bounded moisture transport vectors (Q'), and detrended month-matched 5880 gpm WNPSH edges (135.0 deg E climatology, 127.5 deg E ordinary wet controls, and 132.5 deg E DFAA transitions) for May–Sep Flood transitions (n = 16). (b) All-event composite (n = 39; 189/817 pointwise, 30/817 FDR). (c–d) Window trajectories [t_w0-3 .. t_w0+1] for DIV_ps and DI500 paired with tol = 0.10 matched ordinary wet-month contrasts.",
+  ESM_Fig1: "Figure S1. 200 hPa geopotential height anomalies (shading), month-matched May–Sep 25 and 30 m/s upper-tropospheric jet core contours (purple), and horizontal Takaya–Nakamura (2001) wave-activity flux vectors W (|W| >= 0.08 m^2 s^-2 strictly north of 25 deg N where |U_200| >= 10 m/s; reference 1.0 m^2 s^-2) across East Asia during May–Sep Flood transitions (n = 16)."
 };
 
 function parseCSVLine(line) {
@@ -50,13 +50,15 @@ function seasonBucket(monthNum) {
   const m = Number(monthNum);
   if (m >= 5 && m <= 9) return "flood";
   if (m === 12 || m === 1 || m === 2) return "winter";
-  return "shoulder";
+  if (m >= 3 && m <= 4) return "spring";
+  return "autumn";
 }
 
 function seasonBadge(bucket) {
   if (bucket === "flood") return '<span class="tag tag-flood">Flood (May–Sep)</span>';
   if (bucket === "winter") return '<span class="tag tag-winter">Winter (Dec–Feb)</span>';
-  return '<span class="tag tag-shoulder">Shoulder</span>';
+  if (bucket === "autumn") return '<span class="tag tag-shoulder">Autumn (Oct–Nov)</span>';
+  return '<span class="tag tag-shoulder">Spring (Mar–Apr)</span>';
 }
 
 async function initPortal() {
@@ -152,6 +154,8 @@ async function initPortal() {
         : "n/a (2025)";
       const exMm = trInfo.basin_precip_ex_mm !== undefined ? `${Number(trInfo.basin_precip_ex_mm) >= 0 ? "+" : ""}${Number(trInfo.basin_precip_ex_mm).toFixed(1)}` : "—";
       const rowEl = document.createElement("tr");
+      const tribFw = trInfo.F_w_peak_trib_th05 || trInfo.F_w_peak_trib;
+      const tribRat = trInfo.spi_amp_ratio_th05 || trInfo.spi_amp_ratio;
       rowEl.innerHTML = `
         <td>${ev.event_id}</td>
         <td>${ev.dry_start} &rarr; ${ev.dry_end}</td>
@@ -159,8 +163,8 @@ async function initPortal() {
         <td>${seasonBadge(sB)}</td>
         <td>${Number(ev.S_d).toFixed(2)}</td>
         <td>${Number(ev.F_w).toFixed(2)}</td>
-        <td>${trInfo.peak_tributary || "—"} (${trInfo.F_w_peak_trib ? Number(trInfo.F_w_peak_trib).toFixed(2) : "—"})</td>
-        <td>${trInfo.spi_amp_ratio ? Number(trInfo.spi_amp_ratio).toFixed(2) + "&times;" : "—"}</td>
+        <td>${trInfo.peak_tributary || "n/a"} (${tribFw ? Number(tribFw).toFixed(2) : "n/a"})</td>
+        <td>${tribRat ? Number(tribRat).toFixed(2) + "&times;" : "n/a"}</td>
         <td>${exMm}</td>
         <td>${qWet}</td>
       `;

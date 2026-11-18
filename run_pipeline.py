@@ -23,6 +23,7 @@ from src.basin import (
 )
 from src.circulation import run_circulation_diagnostics, seasonal_teleconnection_skill
 from src.dependence import (
+    bh_fdr,
     dependence_summary,
     fit_copulas,
     grid_dependence_fdr,
@@ -32,10 +33,10 @@ from src.dependence import (
 from src.figures import (
     plot_esm_fig1_wave_flux,
     plot_fig1_study_area,
-    plot_fig2_tributary_amplification,
-    plot_fig3_chronology_and_seasonality,
-    plot_fig4_dependence_and_spatial,
-    plot_fig5_sensitivity_and_runoff,
+    plot_fig2_chronology_and_seasonality,
+    plot_fig3_dependence_and_spatial,
+    plot_fig4_sensitivity_and_runoff,
+    plot_fig5_tributary_amplification,
     plot_fig6_circulation_composites,
 )
 from src.runoff import (
@@ -115,14 +116,8 @@ def render_figures(mask, vectors, circ_fields, tables, fig_dir, formats):
     ].iloc[0].to_dict()
 
     plot_fig1_study_area(mask, tables["hydro_climatology"], vectors, fig_dir, formats=formats)
-    plot_fig2_tributary_amplification(
-        tables["tributary_amplification"],
-        fig_dir,
-        formats=formats,
-        trib_sum_df=tables["tributary_summary"],
-    )
-    plot_fig3_chronology_and_seasonality(tables["event_catalog"], fig_dir, formats=formats)
-    plot_fig4_dependence_and_spatial(
+    plot_fig2_chronology_and_seasonality(tables["event_catalog"], fig_dir, formats=formats)
+    plot_fig3_dependence_and_spatial(
         tables["event_catalog"],
         basin_dep,
         tables["marginal_fits"],
@@ -133,13 +128,19 @@ def render_figures(mask, vectors, circ_fields, tables, fig_dir, formats):
         fig_dir,
         formats=formats,
     )
-    plot_fig5_sensitivity_and_runoff(
+    plot_fig4_sensitivity_and_runoff(
         tables["sensitivity_schemes"],
         tables["index_robustness"],
         tables["event_catalog"],
         tables["datong_strata"],
         fig_dir,
         formats=formats,
+    )
+    plot_fig5_tributary_amplification(
+        tables["tributary_amplification"],
+        fig_dir,
+        formats=formats,
+        trib_sum_df=tables["tributary_summary"],
     )
     plot_fig6_circulation_composites(
         circ_fields,
@@ -275,7 +276,7 @@ def run_full_pipeline(args):
 
         copula_frames.append(fit_copulas(rname, sd_r, fw_r, seed=101 + zid, n_boot=400))
 
-        for s_filt in (None, "Flood (May-Sep)", "Cool (Oct-Apr)"):
+        for s_filt in (None, "Flood (May-Sep)", "Spring (Mar-Apr)", "Autumn (Oct-Nov)", "Winter (Dec-Feb)", "Cool (Oct-Apr)"):
             pr_res = prospective_onset_skill(
                 spi_r, drys_r, periods=periods, season_filter=s_filt, rng_seed=404 + zid
             )
@@ -298,26 +299,44 @@ def run_full_pipeline(args):
     events_df = events_df.copy()
     events_df.insert(0, "event_id", np.arange(1, len(events_df) + 1))
 
+    flood_ov_mask = events_df.apply(
+        lambda r: any(
+            5 <= p.month <= 9
+            for p in pd.period_range(r["wet_start"], r["wet_end"], freq="M")
+        ),
+        axis=1,
+    ).to_numpy()
     seas_rows = []
     seas_masks = [
-        ("All (1961-2025)", np.ones(len(events_df), dtype=bool)),
-        ("Flood (May-Sep)", events_df["trans_month"].between(5, 9).to_numpy()),
-        ("Cool (Oct-Apr)", (~events_df["trans_month"].between(5, 9)).to_numpy()),
-        ("Winter (Dec-Feb)", events_df["trans_month"].isin([12, 1, 2]).to_numpy()),
-        ("Shoulder (Mar-Apr, Oct-Nov)", (~events_df["trans_month"].isin([5, 6, 7, 8, 9, 12, 1, 2])).to_numpy()),
-        ("Short dry (D = 2)", (events_df["D"] == 2).to_numpy()),
-        ("Extended dry (D >= 3)", (events_df["D"] >= 3).to_numpy()),
-        ("Pre-2003 (1961-2002)", (events_df["year"] <= 2002).to_numpy()),
-        ("Post-2003 (2003-2025)", (events_df["year"] >= 2003).to_numpy()),
+        ("All (1961-2025)", np.ones(len(events_df), dtype=bool), False),
+        ("Flood (May-Sep)", events_df["trans_month"].between(5, 9).to_numpy(), True),
+        ("Spring (Mar-Apr)", events_df["trans_month"].isin([3, 4]).to_numpy(), True),
+        ("Autumn (Oct-Nov)", events_df["trans_month"].isin([10, 11]).to_numpy(), True),
+        ("Winter (Dec-Feb)", events_df["trans_month"].isin([12, 1, 2]).to_numpy(), True),
+        ("Short dry (D = 2)", (events_df["D"] == 2).to_numpy(), True),
+        ("Extended dry (D >= 3)", (events_df["D"] >= 3).to_numpy(), True),
+        ("Pre-2003 (1961-2002)", (events_df["year"] <= 2002).to_numpy(), True),
+        ("Post-2003 (2003-2025)", (events_df["year"] >= 2003).to_numpy(), True),
+        ("Flood Overlap (May-Sep)", flood_ov_mask, False),
+        ("Immediate g=1", (events_df["gap"] == 1).to_numpy(), False),
+        ("Short-gap g<=2", (events_df["gap"] <= 2).to_numpy(), False),
+        ("Cool (Oct-Apr)", (~events_df["trans_month"].between(5, 9)).to_numpy(), False),
     ]
-    for s_lbl, smask in seas_masks:
+    for s_lbl, smask, is_fdr_group in seas_masks:
         sub_e = events_df.loc[smask]
         if len(sub_e) < 4:
             continue
         row_d = dependence_summary(sub_e["S_d"], sub_e["F_w"])
         row_d["stratum"] = s_lbl
+        row_d["in_primary_fdr"] = is_fdr_group
         seas_rows.append(row_d)
-    pd.DataFrame(seas_rows).to_csv(data_dir / "seasonal_dependence.csv", index=False)
+    seas_df = pd.DataFrame(seas_rows)
+    seas_df["q_FDR_tau"] = np.nan
+    seas_df["q_FDR_rs"] = np.nan
+    prim_f = seas_df["in_primary_fdr"].to_numpy()
+    seas_df.loc[prim_f, "q_FDR_tau"] = np.round(bh_fdr(seas_df.loc[prim_f, "kendall_p"].to_numpy()), 4)
+    seas_df.loc[prim_f, "q_FDR_rs"] = np.round(bh_fdr(seas_df.loc[prim_f, "spearman_p"].to_numpy()), 4)
+    seas_df.drop(columns=["in_primary_fdr"]).to_csv(data_dir / "seasonal_dependence.csv", index=False)
 
     marg_df = screen_marginals(events_df["S_d"].to_numpy(), events_df["F_w"].to_numpy(), n_boot=400, seed=303)
     marg_df.to_csv(data_dir / "marginal_fits.csv", index=False)
@@ -374,12 +393,12 @@ def run_full_pipeline(args):
     idx_rob_df.to_csv(data_dir / "index_robustness.csv", index=False)
 
     gpcc_df = benchmark_cru_vs_gpcc(
-        pre, raw_dir / "gpcc_precip_050_v2025.nc", frac, zone, lats, lons, months, fit_spi, detect_transitions
+        pre, raw_dir / "gpcc_precip_050_v2025.nc", frac, zone, lats, lons, months, fit_spi, detect_transitions, years=years
     )
     gpcc_df.to_csv(data_dir / "cru_gpcc_validation.csv", index=False)
 
     print("[5/7] Computing 7-tributary fractional HydroBASINS amplification, prospective tiers, and Datong runoff...")
-    masks, _, trib_names, trib_areas_km2 = build_tributary_masks(hybas_prefix, lats, lons, frac)
+    masks, trib_zid, trib_names, trib_areas_km2 = build_tributary_masks(hybas_prefix, lats, lons, frac)
     pr_tribs, spi_tribs = {}, {}
     trib_prosp_rows = []
     for t_i, tname in enumerate(trib_names):
@@ -388,7 +407,7 @@ def run_full_pipeline(args):
         pr_tribs[tname] = pr_t
         spi_tribs[tname] = spi_t
         _, drys_t = detect_transitions(spi_t, periods=periods)
-        for s_filt in (None, "Flood (May-Sep)", "Cool (Oct-Apr)"):
+        for s_filt in (None, "Flood (May-Sep)", "Spring (Mar-Apr)", "Autumn (Oct-Nov)", "Winter (Dec-Feb)", "Cool (Oct-Apr)"):
             res_tp = prospective_onset_skill(
                 spi_t, drys_t, periods=periods, season_filter=s_filt, rng_seed=600 + t_i
             )
@@ -400,11 +419,47 @@ def run_full_pipeline(args):
             trib_prosp_rows.append(res_tp)
     pd.DataFrame(trib_prosp_rows).to_csv(data_dir / "tributary_prospective_skill.csv", index=False)
 
+    cos_cell = frac * np.cos(np.deg2rad(lats))[:, None]
+    resid_rows = []
+    for r_lbl, w_sub in [
+        ("Residual non-tributary (All)", np.where(trib_zid < 0, cos_cell, 0.0)),
+        ("Upper Jinsha + Chongqing-Yichang TGP interval", np.where((trib_zid < 0) & (zone == 1), cos_cell, 0.0)),
+        ("Middle-Lower mainstem corridor", np.where((trib_zid < 0) & (zone >= 2), cos_cell, 0.0)),
+    ]:
+        if w_sub.sum() <= 0:
+            continue
+        pr_res_s = area_weighted_series(pre, w_sub, zone=None, zone_id=0, lats=None)
+        spi_res_s = fit_spi(pr_res_s, months, scale=1)
+        cl_res = np.array([pr_res_s[months == m].mean() for m in range(1, 13)])
+        anom_res = np.array([pr_res_s[t] - cl_res[months[t] - 1] for t in range(len(pr_res_s))])
+        ev_spis = []
+        n_exceed_tribs = 0
+        for _, er in events_df.iterrows():
+            ks, j2e = int(er["k"]), int(er["j2"]) + 1
+            seg_r = spi_res_s[ks:j2e]
+            fw_r = float(np.sum(seg_r[seg_r >= 0.5]))
+            ev_spis.append(fw_r)
+            t_mx = max(float(np.sum(spi_tribs[nm][ks:j2e][spi_tribs[nm][ks:j2e] >= 0.5])) for nm in trib_names)
+            if fw_r > t_mx:
+                n_exceed_tribs += 1
+        resid_rows.append({
+            "zone": r_lbl,
+            "n_cells": int((w_sub > 0).sum()),
+            "cos_frac_of_basin_pct": round(float(100.0 * w_sub.sum() / cos_cell.sum()), 2),
+            "mean_event_fw_spi": round(float(np.mean(ev_spis)), 3),
+            "median_event_fw_spi": round(float(np.median(ev_spis)), 3),
+            "median_event_mm_excess": round(float(np.median([np.sum(np.maximum(anom_res[int(er['k']):int(er['j2'])+1], 0.0)) for _, er in events_df.iterrows()])), 2),
+            "n_exceed_all_7tribs": n_exceed_tribs,
+        })
+    pd.DataFrame(resid_rows).to_csv(data_dir / "residual_mask_coverage.csv", index=False)
+
     trib_df = tributary_amplification(
         events_df, pr_basin, pr_tribs, spi_basin, spi_tribs, months, periods, trib_areas_km2=trib_areas_km2
     )
     trib_df.to_csv(data_dir / "tributary_amplification.csv", index=False)
-    trib_sum_df = summarize_tributary_amplification(trib_df)
+    trib_sum_df = summarize_tributary_amplification(
+        trib_df, basin_spi=spi_basin, spi_tribs=spi_tribs, events_df=events_df, periods=periods
+    )
     trib_sum_df.to_csv(data_dir / "tributary_summary.csv", index=False)
 
     datong_xlsx = raw_dir / "datong_discharge_1950_2024.xlsx"
@@ -436,18 +491,23 @@ def run_full_pipeline(args):
 
     edge_c = circ_fields["wnpsh_edge_clim_lon"]
     edge_f = circ_fields["wnpsh_edge_flood_lon"]
+    edge_o = circ_fields["wnpsh_edge_ord_wet_lon"]
     pd.DataFrame([{
         "wnpsh_edge_clim_lon": round(float(edge_c), 2) if np.isfinite(edge_c) else np.nan,
         "wnpsh_edge_flood_lon": round(float(edge_f), 2) if np.isfinite(edge_f) else np.nan,
+        "wnpsh_edge_ord_wet_lon": round(float(edge_o), 2) if np.isfinite(edge_o) else np.nan,
     }]).to_csv(data_dir / "circulation_metadata.csv", index=False)
 
-    tele_df = seasonal_teleconnection_skill(raw_dir, events_df)
+    tele_df = seasonal_teleconnection_skill(
+        raw_dir, events_df, dry_spells=reg_series["Basin"][3], periods=periods, spi_basin=spi_basin
+    )
     tele_df.to_csv(data_dir / "seasonal_indices_skill.csv", index=False)
 
     field_save_keys = [
         "lat", "lon", "Z500_all", "Z500_flood", "p_Z500_all", "p_Z500_flood",
-        "Z200_flood", "h500_flood", "h500_flood_clim",
-        "wnpsh_edge_flood_lon", "wnpsh_edge_clim_lon",
+        "q_Z500_all", "q_Z500_flood", "Z850_flood", "p_Z850_flood", "q_Z850_flood",
+        "Z200_flood", "h500_flood", "h500_flood_clim", "h500_ord_wet_flood",
+        "wnpsh_edge_flood_lon", "wnpsh_edge_clim_lon", "wnpsh_edge_ord_wet_lon",
         "qu_anom_all", "qv_anom_all", "qu_anom_flood", "qv_anom_flood",
         "u200_clim_flood", "wx_200_flood", "wy_200_flood",
     ]

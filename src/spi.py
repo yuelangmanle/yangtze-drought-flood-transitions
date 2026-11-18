@@ -38,7 +38,7 @@ def fit_spi(series, months, scale=1):
 def thornthwaite_pet(temp_c, years, months, mean_lat):
     """Thornthwaite (1948) monthly PET [mm] with astronomically corrected daylength."""
     mdays = np.array([31.0, 28.25, 31.0, 30.0, 31.0, 30.0, 31.0, 31.0, 30.0, 31.0, 30.0, 31.0])
-    mid_doy = np.array([15, 45, 75, 105, 135, 162, 198, 228, 258, 288, 318, 344], dtype=float)
+    mid_doy = np.array([15, 45, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349], dtype=float)
     decl = 0.409 * np.sin(2.0 * np.pi * mid_doy / 365.0 - 1.39)
     ws = np.arccos(np.clip(-np.tan(np.deg2rad(mean_lat)) * np.tan(decl), -1.0, 1.0))
     daylight_hrs = (24.0 / np.pi) * ws
@@ -92,7 +92,7 @@ def fit_spei(water_balance, months, scale=1):
             alpha = l2 / sinc
             xi = l1 - alpha * (1.0 - sinc) / k
             arg = 1.0 - k * (raw - xi) / alpha
-            y = np.full(len(raw), -20.0 if k > 0 else 20.0, dtype=float)
+            y = np.full(len(raw), 20.0 if k > 0 else -20.0, dtype=float)
             inside = arg > 1e-12
             y[inside] = -(1.0 / k) * np.log(arg[inside])
 
@@ -106,7 +106,9 @@ def _season_label(mo):
         return "Flood (May-Sep)"
     if mo in (12, 1, 2):
         return "Winter (Dec-Feb)"
-    return "Shoulder (Mar-Apr, Oct-Nov)"
+    if mo in (3, 4):
+        return "Spring (Mar-Apr)"
+    return "Autumn (Oct-Nov)"
 
 
 def detect_transitions(spi, periods=None, dry_th=-0.5, wet_th=0.5, min_dry=2, max_gap=4, min_fw=0.0):
@@ -157,7 +159,10 @@ def detect_transitions(spi, periods=None, dry_th=-0.5, wet_th=0.5, min_dry=2, ma
                         rec["year"] = int(p_k.year)
                         rec["trans_month"] = int(p_k.month)
                         rec["season"] = _season_label(int(p_k.month))
-                    events.append(rec)
+                    if events and events[-1]["k"] == k:
+                        events[-1] = rec
+                    else:
+                        events.append(rec)
                     break
                 k += 1
         i = max(j, i + 1)
@@ -281,10 +286,13 @@ def run_null_surrogates(spi, months, years, n_boot=1000, seed=2026, region="Basi
         return hits / total if total else np.nan
 
     unique_years = np.unique(years)
-    year_indices = [np.where(years == y)[0] for y in unique_years]
+    q_slots = {
+        q_id: [np.where((years == y) & (np.isin(months, q_mos)))[0] for y in unique_years]
+        for q_id, q_mos in enumerate([(1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)])
+    }
 
     records = []
-    for mode in ("iid_gaussian", "seasonal_ar1", "seasonal_ar2", "year_block_shuffle"):
+    for mode in ("iid_gaussian", "seasonal_ar1", "seasonal_ar2", "seasonal_block_shuffle"):
         cnts, taus, m2_rates = [], [], []
         for _ in range(n_boot):
             if mode == "iid_gaussian":
@@ -304,8 +312,11 @@ def run_null_surrogates(spi, months, years, n_boot=1000, seed=2026, region="Basi
                     b1, b2 = ar2_coef[m_idx]
                     sim[t] = b1 * sim[t - 1] + b2 * sim[t - 2] + ar2_sig[m_idx] * rng.normal()
             else:
-                perm = rng.permutation(len(year_indices))
-                sim = np.concatenate([spi[year_indices[p]] for p in perm])
+                sim = np.empty(len(spi), dtype=float)
+                for q_id in range(4):
+                    perms = rng.permutation(len(unique_years))
+                    for dst_y, src_y in enumerate(perms):
+                        sim[q_slots[q_id][dst_y]] = spi[q_slots[q_id][src_y]]
 
             evs, _ = detect_transitions(sim)
             cnts.append(len(evs))
@@ -340,6 +351,13 @@ def run_null_surrogates(spi, months, years, n_boot=1000, seed=2026, region="Basi
     return pd.DataFrame(records), rhos
 
 
+UPSTREAM_TGP_TRIBS = {"Yalong", "Min-Tuo", "Jialing", "Wujiang"}
+
+
+def _tgp_position(name):
+    return "Upstream_TGP" if name in UPSTREAM_TGP_TRIBS else "Downstream_TGP"
+
+
 def tributary_amplification(
     events_df,
     pr_basin,
@@ -351,7 +369,7 @@ def tributary_amplification(
     trib_areas_km2=None,
     basin_area_km2=1748000.0,
 ):
-    """Compare basin-mean vs peak tributary SPI, depth excess (mm), and volumetric excess (km^3)."""
+    """Compare basin-mean vs peak tributary SPI (>=0 and >=0.5), depth excess (mm), and volumetric excess (km^3)."""
     p_map = {p: i for i, p in enumerate(periods)}
     clim_b = np.array([pr_basin[months == mo].mean() for mo in range(1, 13)])
     clim_t = {
@@ -364,16 +382,20 @@ def tributary_amplification(
         i0 = p_map[pd.Period(row["wet_start"], freq="M")]
         i1 = p_map[pd.Period(row["wet_end"], freq="M")]
         fw_b = float(row["F_w"])
+        w_len = int(row["W"]) if "W" in row else (i1 - i0 + 1)
+        gap_len = int(row["gap"]) if "gap" in row else np.nan
+        overlaps_may_sep = any(5 <= int(periods[t].month) <= 9 for t in range(i0, i1 + 1))
 
         ex_b = float(sum(pr_basin[t] - clim_b[int(months[t]) - 1] for t in range(i0, i1 + 1)))
         cl_b_sum = float(sum(clim_b[int(months[t]) - 1] for t in range(i0, i1 + 1)))
         pct_b = 100.0 * ex_b / cl_b_sum if cl_b_sum > 0 else np.nan
         vol_b_km3 = ex_b * basin_area_km2 * 1e-6
 
-        trib_fw, trib_ex, trib_pct, trib_vol = {}, {}, {}, {}
+        trib_fw, trib_fw05, trib_ex, trib_pct, trib_vol = {}, {}, {}, {}, {}
         for nm, s_t in spi_tribs.items():
-            pos = np.maximum(s_t[i0 : i1 + 1], 0.0)
-            trib_fw[nm] = float(pos.sum())
+            seg_s = s_t[i0 : i1 + 1]
+            trib_fw[nm] = float(np.maximum(seg_s, 0.0).sum())
+            trib_fw05[nm] = float(np.where(seg_s >= 0.5, seg_s, 0.0).sum())
             ex_t = float(sum(pr_tribs[nm][t] - clim_t[nm][int(months[t]) - 1] for t in range(i0, i1 + 1)))
             cl_t = float(sum(clim_t[nm][int(months[t]) - 1] for t in range(i0, i1 + 1)))
             trib_ex[nm] = ex_t
@@ -387,6 +409,10 @@ def tributary_amplification(
         peak_fw = trib_fw[peak_nm]
         amp_spi = peak_fw / fw_b if fw_b > 0 else np.nan
 
+        peak_nm05 = max(trib_fw05, key=trib_fw05.get)
+        peak_fw05 = trib_fw05[peak_nm05]
+        amp_spi05 = peak_fw05 / fw_b if fw_b > 0 else np.nan
+
         peak_mm_nm = max(trib_ex, key=trib_ex.get)
         amp_mm = trib_ex[peak_mm_nm] / ex_b if ex_b > 0 else np.nan
         amp_pct = trib_pct[peak_mm_nm] / pct_b if pct_b > 0 else np.nan
@@ -394,6 +420,8 @@ def tributary_amplification(
         peak_vol_nm = max(trib_vol, key=trib_vol.get) if trib_areas_km2 else peak_mm_nm
         peak_vol_km3 = trib_vol[peak_vol_nm] if trib_areas_km2 else np.nan
         vol_share_pct = 100.0 * peak_vol_km3 / vol_b_km3 if (vol_b_km3 > 0 and np.isfinite(peak_vol_km3)) else np.nan
+        peak_vol_area = float(trib_areas_km2[peak_vol_nm]) if trib_areas_km2 else np.nan
+        area_norm_conc = (vol_share_pct / (100.0 * peak_vol_area / basin_area_km2)) if (np.isfinite(vol_share_pct) and np.isfinite(peak_vol_area)) else np.nan
 
         tmo = int(row["trans_month"])
         rec = {
@@ -403,15 +431,23 @@ def tributary_amplification(
             "wet_end": row["wet_end"],
             "year": int(row["year"]),
             "trans_month": tmo,
+            "W": w_len,
+            "gap": gap_len,
             "season": _season_label(tmo),
+            "flood_overlap": bool(overlaps_may_sep),
             "F_w_basin": round(fw_b, 3),
             "peak_tributary": peak_nm,
+            "tgp_sector_spi": _tgp_position(peak_nm),
             "F_w_peak_trib": round(peak_fw, 3),
+            "F_w_peak_trib_th05": round(peak_fw05, 3),
             "spi_amp_ratio": round(amp_spi, 3),
+            "spi_amp_ratio_th05": round(amp_spi05, 3),
+            "spi_add_excess": round(peak_fw - fw_b, 3),
             "basin_precip_ex_mm": round(ex_b, 1),
             "basin_precip_ex_pct": round(pct_b, 1),
             "basin_precip_vol_km3": round(vol_b_km3, 2),
             "peak_mm_tributary": peak_mm_nm,
+            "tgp_sector_mm": _tgp_position(peak_mm_nm),
             "peak_trib_ex_mm": round(trib_ex[peak_mm_nm], 1),
             "peak_trib_ex_pct": round(trib_pct[peak_mm_nm], 1),
             "mm_excess_ratio": round(amp_mm, 3) if np.isfinite(amp_mm) else np.nan,
@@ -419,6 +455,7 @@ def tributary_amplification(
             "peak_vol_tributary": peak_vol_nm,
             "peak_trib_vol_km3": round(peak_vol_km3, 2) if np.isfinite(peak_vol_km3) else np.nan,
             "peak_vol_share_pct": round(vol_share_pct, 1) if np.isfinite(vol_share_pct) else np.nan,
+            "area_norm_conc_ratio": round(area_norm_conc, 3) if np.isfinite(area_norm_conc) else np.nan,
             "spi_mm_basin_match": bool(peak_nm == peak_mm_nm),
         }
         for nm, val in trib_fw.items():
@@ -427,50 +464,218 @@ def tributary_amplification(
     return pd.DataFrame(rows)
 
 
-def summarize_tributary_amplification(trib_df):
-    """Compute season-stratified tributary amplification, volumetric shares, and uncoupled scaling tests."""
+def _ordinary_wet_tributary_benchmark(basin_spi, spi_tribs, events_df, periods, wet_th=0.5):
+    """Evaluate peak-to-basin ratios and log-log scaling across non-DFAA ordinary wet runs."""
+    dfaa_months = set()
+    p_map = {p: i for i, p in enumerate(periods)}
+    for _, r in events_df.iterrows():
+        p0, p1 = pd.Period(r["wet_start"], freq="M"), pd.Period(r["wet_end"], freq="M")
+        cur = p0
+        while cur <= p1:
+            dfaa_months.add(cur)
+            cur += 1
+
+    rows = []
+    n = len(basin_spi)
+    i = 0
+    while i < n:
+        if np.isfinite(basin_spi[i]) and basin_spi[i] >= wet_th:
+            j = i
+            while j < n and np.isfinite(basin_spi[j]) and basin_spi[j] >= wet_th:
+                j += 1
+            ps = periods[i:j]
+            if not any(p in dfaa_months for p in ps):
+                fw_b = float(basin_spi[i:j].sum())
+                fw_p = max(float(np.maximum(s_t[i:j], 0.0).sum()) for s_t in spi_tribs.values())
+                rows.append({"F_w_basin": fw_b, "F_w_peak_trib": fw_p, "spi_amp_ratio": fw_p / fw_b, "W": j - i})
+            i = j
+        else:
+            i += 1
+    return pd.DataFrame(rows)
+
+
+def _gaussian_8x8_order_null(basin_spi, spi_tribs, n_boot=500, seed=909):
+    """Simulate 8-series stationary MVN draws matching empirical monthly (basin + 7-tributary) SPI correlation."""
+    rng = np.random.default_rng(seed)
+    names = list(spi_tribs.keys())
+    mat = np.column_stack([basin_spi] + [spi_tribs[nm] for nm in names])
+    corr = np.corrcoef(mat, rowvar=False)
+    chol = np.linalg.cholesky(corr)
+    n_t = len(basin_spi)
+
+    mild_meds, sev_meds, betas, mw_pvals = [], [], [], []
+    for _ in range(n_boot):
+        z_draw = rng.normal(size=(n_t, 8))
+        sim = np.einsum("tk,ik->ti", z_draw, chol)
+        evs, _ = detect_transitions(sim[:, 0])
+        if len(evs) < 12:
+            continue
+        fb = np.array([e["F_w"] for e in evs], dtype=float)
+        fp = np.array(
+            [
+                max(
+                    float(np.where(sim[e["k"] : e["j2"] + 1, t_i] >= 0.5, sim[e["k"] : e["j2"] + 1, t_i], 0.0).sum())
+                    for t_i in range(1, 8)
+                )
+                for e in evs
+            ],
+            dtype=float,
+        )
+        ok_pos = (fb > 0.0) & (fp > 0.0)
+        if ok_pos.sum() < 10:
+            continue
+        fb_p, fp_p = fb[ok_pos], fp[ok_pos]
+        rat = fp_p / fb_p
+        if np.sum(fb_p < 1.0) >= 3 and np.sum(fb_p >= 1.0) >= 3:
+            mild_meds.append(float(np.median(rat[fb_p < 1.0])))
+            sev_meds.append(float(np.median(rat[fb_p >= 1.0])))
+            _, pv = stats.mannwhitneyu(rat[fb_p < 1.0], rat[fb_p >= 1.0], alternative="two-sided")
+            mw_pvals.append(float(pv))
+        betas.append(float(stats.linregress(np.log(fb_p), np.log(fp_p)).slope))
+
+    return {
+        "n_boot": len(betas),
+        "mild_ratio_med": round(float(np.median(mild_meds)), 3),
+        "sev_ratio_med": round(float(np.median(sev_meds)), 3),
+        "loglog_beta_med": round(float(np.median(betas)), 3),
+        "loglog_beta_ci95_lo": round(float(np.percentile(betas, 2.5)), 3),
+        "loglog_beta_ci95_hi": round(float(np.percentile(betas, 97.5)), 3),
+        "frac_mw_p_lt_01": round(float(np.mean(np.array(mw_pvals) < 0.01)), 3),
+    }
+
+
+def summarize_tributary_amplification(trib_df, basin_spi=None, spi_tribs=None, events_df=None, periods=None):
+    """Compute season/duration/gap-stratified tributary metrics, ordinary-wet, and 8x8 Gaussian nulls."""
     rows = []
     strata = [
         ("All (1961-2025)", trib_df),
-        ("Flood (May-Sep)", trib_df[trib_df["trans_month"].between(5, 9)]),
-        ("Cool (Oct-Apr)", trib_df[~trib_df["trans_month"].between(5, 9)]),
-        ("Winter (Dec-Feb)", trib_df[trib_df["trans_month"].isin([12, 1, 2])]),
-        ("Shoulder (Mar-Apr, Oct-Nov)", trib_df[~trib_df["trans_month"].isin([5, 6, 7, 8, 9, 12, 1, 2])]),
         ("Mild (F_w < 1.0)", trib_df[trib_df["F_w_basin"] < 1.0]),
         ("Mod/Sev (F_w >= 1.0)", trib_df[trib_df["F_w_basin"] >= 1.0]),
+        ("Fixed W=1 Mild", trib_df[(trib_df["W"] == 1) & (trib_df["F_w_basin"] < 1.0)]),
+        ("Fixed W=1 Mod/Sev", trib_df[(trib_df["W"] == 1) & (trib_df["F_w_basin"] >= 1.0)]),
+        ("Flood (May-Sep)", trib_df[trib_df["trans_month"].between(5, 9)]),
+        ("Flood Overlap (May-Sep)", trib_df[trib_df["flood_overlap"]]),
+        ("Cool (Oct-Apr)", trib_df[~trib_df["trans_month"].between(5, 9)]),
+        ("Spring (Mar-Apr)", trib_df[trib_df["trans_month"].isin([3, 4])]),
+        ("Autumn (Oct-Nov)", trib_df[trib_df["trans_month"].isin([10, 11])]),
+        ("Winter (Dec-Feb)", trib_df[trib_df["trans_month"].isin([12, 1, 2])]),
+        ("Immediate (g = 1)", trib_df[trib_df["gap"] == 1]),
+        ("Short-gap (g <= 2)", trib_df[trib_df["gap"] <= 2]),
     ]
     mild_df = trib_df[trib_df["F_w_basin"] < 1.0]
     sev_df = trib_df[trib_df["F_w_basin"] >= 1.0]
     _, p_mw_spi = stats.mannwhitneyu(mild_df["spi_amp_ratio"], sev_df["spi_amp_ratio"], alternative="two-sided")
     _, p_mw_mm = stats.mannwhitneyu(mild_df["mm_excess_ratio"].dropna(), sev_df["mm_excess_ratio"].dropna(), alternative="two-sided")
+    _, p_mw_add = stats.mannwhitneyu(mild_df["spi_add_excess"], sev_df["spi_add_excess"], alternative="two-sided")
+    w1_df = trib_df[trib_df["W"] == 1]
+    _, p_mw_w1 = stats.mannwhitneyu(
+        w1_df.loc[w1_df["F_w_basin"] < 1.0, "spi_amp_ratio"],
+        w1_df.loc[w1_df["F_w_basin"] >= 1.0, "spi_amp_ratio"],
+        alternative="two-sided",
+    )
     rs_level, p_level = stats.spearmanr(trib_df["F_w_basin"], trib_df["F_w_peak_trib"])
+    rs_w1, p_w1 = stats.spearmanr(w1_df["F_w_basin"], w1_df["F_w_peak_trib"])
     lr = stats.linregress(np.log(trib_df["F_w_basin"]), np.log(trib_df["F_w_peak_trib"]))
     t_sublinear = (lr.slope - 1.0) / lr.stderr
     p_sublinear = 2.0 * float(stats.t.cdf(-abs(t_sublinear), df=len(trib_df) - 2))
+    lr_int = stats.linregress(np.log(trib_df["F_w_basin"] / trib_df["W"]), np.log(trib_df["F_w_peak_trib"] / trib_df["W"]))
+    t_int = (lr_int.slope - 1.0) / lr_int.stderr
+    p_int = 2.0 * float(stats.t.cdf(-abs(t_int), df=len(trib_df) - 2))
 
     for sname, sub in strata:
         if sub.empty:
             continue
+        is_all = sname.startswith("All")
         rows.append({
             "stratum": sname,
             "n_events": len(sub),
             "spi_ratio_median": round(float(sub["spi_amp_ratio"].median()), 3),
+            "spi_ratio_th05_median": round(float(sub["spi_amp_ratio_th05"].median()), 3),
             "spi_ratio_iqr": f"{sub['spi_amp_ratio'].quantile(0.25):.2f}–{sub['spi_amp_ratio'].quantile(0.75):.2f}",
-            "spi_ratio_mean": round(float(sub["spi_amp_ratio"].mean()), 3),
+            "spi_add_excess_median": round(float(sub["spi_add_excess"].median()), 3),
             "mm_ratio_median": round(float(sub["mm_excess_ratio"].median()), 3),
             "mm_ratio_iqr": f"{sub['mm_excess_ratio'].quantile(0.25):.2f}–{sub['mm_excess_ratio'].quantile(0.75):.2f}",
-            "mm_ratio_mean": round(float(sub["mm_excess_ratio"].mean()), 3),
             "basin_ex_mm_median": round(float(sub["basin_precip_ex_mm"].median()), 1),
             "peak_trib_ex_mm_median": round(float(sub["peak_trib_ex_mm"].median()), 1),
-            "peak_trib_ex_mm_mean": round(float(sub["peak_trib_ex_mm"].mean()), 1),
             "peak_vol_km3_median": round(float(sub["peak_trib_vol_km3"].median()), 2),
             "n_spi_mm_divergent": int((~sub["spi_mm_basin_match"]).sum()),
-            "mw_spi_mild_vs_sev_p": round(float(p_mw_spi), 6) if sname.startswith("All") else np.nan,
-            "mw_mm_mild_vs_sev_p": round(float(p_mw_mm), 4) if sname.startswith("All") else np.nan,
-            "level_spearman_rs": round(float(rs_level), 4) if sname.startswith("All") else np.nan,
-            "level_spearman_p": round(float(p_level), 8) if sname.startswith("All") else np.nan,
-            "loglog_slope": round(float(lr.slope), 4) if sname.startswith("All") else np.nan,
-            "loglog_slope_vs1_p": round(float(p_sublinear), 6) if sname.startswith("All") else np.nan,
+            "mw_spi_mild_vs_sev_p": round(float(p_mw_spi), 6) if is_all else np.nan,
+            "mw_mm_mild_vs_sev_p": round(float(p_mw_mm), 4) if is_all else np.nan,
+            "mw_add_mild_vs_sev_p": round(float(p_mw_add), 4) if is_all else np.nan,
+            "mw_w1_mild_vs_sev_p": round(float(p_mw_w1), 5) if is_all else np.nan,
+            "level_spearman_rs": round(float(rs_level), 4) if is_all else np.nan,
+            "level_spearman_p": round(float(p_level), 8) if is_all else np.nan,
+            "w1_level_rs": round(float(rs_w1), 4) if is_all else np.nan,
+            "w1_level_p": round(float(p_w1), 4) if is_all else np.nan,
+            "loglog_slope": round(float(lr.slope), 4) if is_all else np.nan,
+            "loglog_slope_vs1_p": round(float(p_sublinear), 6) if is_all else np.nan,
+            "intensity_loglog_slope": round(float(lr_int.slope), 4) if is_all else np.nan,
+            "intensity_loglog_vs1_p": round(float(p_int), 6) if is_all else np.nan,
+        })
+
+    if basin_spi is not None and spi_tribs is not None and events_df is not None and periods is not None:
+        ow_df = _ordinary_wet_tributary_benchmark(basin_spi, spi_tribs, events_df, periods)
+        ow_m = ow_df[ow_df["F_w_basin"] < 1.0]
+        ow_s = ow_df[ow_df["F_w_basin"] >= 1.0]
+        _, p_ow_mw = stats.mannwhitneyu(ow_m["spi_amp_ratio"], ow_s["spi_amp_ratio"], alternative="two-sided")
+        lr_ow = stats.linregress(np.log(ow_df["F_w_basin"]), np.log(ow_df["F_w_peak_trib"]))
+        g_null = _gaussian_8x8_order_null(basin_spi, spi_tribs, n_boot=500, seed=909)
+        for lbl, sub_o, beta_v, p_v in [
+            ("Benchmark: OrdWet All", ow_df, lr_ow.slope, p_ow_mw),
+            ("Benchmark: OrdWet Mild", ow_m, np.nan, np.nan),
+            ("Benchmark: OrdWet Mod/Sev", ow_s, np.nan, np.nan),
+        ]:
+            rows.append({
+                "stratum": lbl,
+                "n_events": len(sub_o),
+                "spi_ratio_median": round(float(sub_o["spi_amp_ratio"].median()), 3),
+                "spi_ratio_th05_median": np.nan,
+                "spi_ratio_iqr": f"{sub_o['spi_amp_ratio'].quantile(0.25):.2f}–{sub_o['spi_amp_ratio'].quantile(0.75):.2f}",
+                "spi_add_excess_median": round(float((sub_o["F_w_peak_trib"] - sub_o["F_w_basin"]).median()), 3),
+                "mm_ratio_median": np.nan,
+                "mm_ratio_iqr": "",
+                "basin_ex_mm_median": np.nan,
+                "peak_trib_ex_mm_median": np.nan,
+                "peak_vol_km3_median": np.nan,
+                "n_spi_mm_divergent": np.nan,
+                "mw_spi_mild_vs_sev_p": round(float(p_v), 12) if np.isfinite(p_v) else np.nan,
+                "mw_mm_mild_vs_sev_p": np.nan,
+                "mw_add_mild_vs_sev_p": np.nan,
+                "mw_w1_mild_vs_sev_p": np.nan,
+                "level_spearman_rs": np.nan,
+                "level_spearman_p": np.nan,
+                "w1_level_rs": np.nan,
+                "w1_level_p": np.nan,
+                "loglog_slope": round(float(beta_v), 4) if np.isfinite(beta_v) else np.nan,
+                "loglog_slope_vs1_p": np.nan,
+                "intensity_loglog_slope": np.nan,
+                "intensity_loglog_vs1_p": np.nan,
+            })
+        rows.append({
+            "stratum": "Benchmark: 8x8 MVN Null (Mild)",
+            "n_events": g_null["n_boot"],
+            "spi_ratio_median": g_null["mild_ratio_med"],
+            "spi_ratio_th05_median": np.nan,
+            "spi_ratio_iqr": f"Sev={g_null['sev_ratio_med']:.3f}; frac p<0.01={g_null['frac_mw_p_lt_01']:.3f}",
+            "spi_add_excess_median": np.nan,
+            "mm_ratio_median": np.nan,
+            "mm_ratio_iqr": f"beta CI=[{g_null['loglog_beta_ci95_lo']:.3f}, {g_null['loglog_beta_ci95_hi']:.3f}]",
+            "basin_ex_mm_median": np.nan,
+            "peak_trib_ex_mm_median": np.nan,
+            "peak_vol_km3_median": np.nan,
+            "n_spi_mm_divergent": np.nan,
+            "mw_spi_mild_vs_sev_p": np.nan,
+            "mw_mm_mild_vs_sev_p": np.nan,
+            "mw_add_mild_vs_sev_p": np.nan,
+            "mw_w1_mild_vs_sev_p": np.nan,
+            "level_spearman_rs": np.nan,
+            "level_spearman_p": np.nan,
+            "w1_level_rs": np.nan,
+            "w1_level_p": np.nan,
+            "loglog_slope": g_null["loglog_beta_med"],
+            "loglog_slope_vs1_p": np.nan,
+            "intensity_loglog_slope": np.nan,
+            "intensity_loglog_vs1_p": np.nan,
         })
     return pd.DataFrame(rows)
 

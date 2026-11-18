@@ -23,7 +23,7 @@
   <section class="hero" id="top">
     <div class="container">
       <div class="eyebrow">Hydroclimatic Hazards &middot; Yangtze River Basin &middot; 1961–2025</div>
-      <h1>Severity Independence Within Statistical Power Bounds, Tributary Masking, and Synoptic Circulation Signatures of Drought-to-Flood Transitions</h1>
+      <h1>Severity Independence Within Statistical Power Bounds, Tributary Masking, and Circulation Signatures of Monthly SPI-1 Drought-to-Flood Transitions</h1>
       <p class="hero-sub">
         Reproducible data archive and analysis suite covering 65 years of CRU TS v4.10 precipitation, temperature, and Penman–Monteith PET grids, GPCC Monthly v2025 benchmark validation, Datong hydrometric discharge (1961–2024), and multi-reanalysis atmospheric fields (NCEP/NCAR-1 and NCEP-DOE-2) across the Yangtze River Basin and seven major tributaries.
       </p>
@@ -40,22 +40,22 @@
       <div class="kpi-card">
         <div class="kpi-val" id="kpi-events">39 Events</div>
         <div class="kpi-label">Basin-wide DFAA episodes (1961–2025)</div>
-        <div class="kpi-note">0.60 events yr⁻¹ &middot; 16 May–Sep flood (41.0%) vs. 23 cool (59.0%)</div>
+        <div class="kpi-note">0.60 yr⁻¹ &middot; 16 Flood, 13 Winter, 8 Autumn, 2 Spring</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-val" id="kpi-tau">&tau; = &minus;0.139</div>
         <div class="kpi-label">No detectable S<sub>d</sub>–F<sub>w</sub> dependence (p = 0.213)</div>
-        <div class="kpi-note">0/748 BH-FDR (field p = 0.183) &middot; MDE |&tau;| = 0.313 (|r| = 0.436)</div>
+        <div class="kpi-note">0/748 BH-FDR (field p = 0.274) &middot; MDE |&tau;| = 0.313 (|r| = 0.436)</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-val" id="kpi-amp">1.84&times; vs. 1.24&times;</div>
-        <div class="kpi-label">Peak tributary amplification ratio</div>
-        <div class="kpi-note">Physical rainfall excess median: 3.29&times; (14.23 km&sup3;)</div>
+        <div class="kpi-val" id="kpi-amp">3.29&times; (14.23 km&sup3;)</div>
+        <div class="kpi-label">Peak tributary physical excess ratio</div>
+        <div class="kpi-note">SPI W = 1 control r<sub>s</sub> = +0.201 (p = 0.305); 8&times;8 MVN &beta; = 0.612</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-val" id="kpi-circ">&Delta;DI500 = +1.18&sigma;</div>
-        <div class="kpi-label">Mid-tropospheric dipole &amp; DIV<sub>ps</sub> (−1.10 mm/d, p = 0.0001)</div>
-        <div class="kpi-note">Exceeds wet controls (p = 0.015) &middot; NCEP-DOE-2 confirmed</div>
+        <div class="kpi-val" id="kpi-circ">&Delta;DI500 = +1.17&sigma;</div>
+        <div class="kpi-label">East Asian dipole &amp; DIV<sub>ps</sub> (&minus;1.10 mm/d, p = 0.0001)</div>
+        <div class="kpi-note">Post-1992 matched p = 0.994 &middot; Causal CV5 AUC 0.357–0.422</div>
       </div>
     </div>
   </div>
@@ -70,7 +70,7 @@
         <div class="card">
           <h3>Copula &amp; Marginal Selection</h3>
           <p>
-            Across Upper, Middle, and Lower subbasins (n = 39–43), nine parametric copulas (including 90&deg;/270&deg; rotated tail models) fall within |&Delta;AICc| &lt; 2 relative to Independence. At whole-basin scale (n = 39), 90&deg;-rotated Gumbel lowers AICc by &minus;2.37 due to isolated severe droughts yet fails Cram&eacute;r–von Mises goodness-of-fit (p = 0.017) whereas Independence passes (p = 0.544), with 0/748 grid cells significant after BH-FDR (seasonal AR(1) field p = 0.183).
+            Across Upper, Middle (n = 42), and Lower subbasins (n = 39–42), nine parametric copulas (including 90&deg;/270&deg; rotated tail models) fall within |&Delta;AICc| &lt; 2 relative to Independence. At whole-basin scale (n = 39), 90&deg;-rotated Gumbel lowers AICc by &minus;2.37 via isolated severe droughts yet fails Cram&eacute;r–von Mises goodness-of-fit (p = 0.017) whereas Independence passes (p = 0.544), with 43/748 raw nominal p &lt; 0.05 cells and 0/748 BH-FDR q &lt; 0.05 (seasonal AR(1) field p = 0.274).
           </p>
           <div class="table-wrap" style="margin-top:0.8rem">
             <table id="subregion-table">
@@ -92,7 +92,7 @@
         <div class="card">
           <h3>Circulation &amp; Reanalysis Diagnostics</h3>
           <p>
-            Sequential transitions coincide with sharp intensification of the Northeast Asia–Plateau mid- and upper-tropospheric dipole (DI500, DI200) and surface-bounded vertically integrated moisture flux convergence (&minus;&Delta;DIV<sub>ps</sub> = &minus;1.10 mm day⁻¹), exceeding matched ordinary wet controls (DI500 +0.464&sigma;, p = 0.015; DI200 +0.388&sigma;, p = 0.022; EAP850 &minus;0.678&sigma;, p = 0.005) and replicating in NCEP-DOE-2 DIV<sub>ps</sub> (p = 0.0001).
+            Sequential transitions coincide with intensification of the Northeast Asia–Plateau dipole (DI500 +1.170&sigma;, DI200 +1.037&sigma;) and surface-bounded moisture flux convergence (&Delta;DIV<sub>ps</sub> = &minus;1.120&sigma;, &minus;1.10 mm day⁻¹, q<sub>FDR</sub> = 0.0005), replicating in NCEP-DOE-2 (p &le; 0.008). However, matched dipole superiority disappears after 1992 (p = 0.994) and in onset-only controls (p = 0.231), corrected Huang (2004) EAP850 reverses (+0.886&sigma;), and causal seasonal ENSO/NAO CV5 AUCs remain near chance (0.357–0.422).
           </p>
           <div class="table-wrap" style="margin-top:0.8rem">
             <table id="circ-table">
@@ -123,9 +123,10 @@
         <input type="text" id="search-input" placeholder="Search year, month, or tributary (e.g. 2011, Hanjiang)" />
         <select id="season-filter">
           <option value="all">All seasons (n = 39)</option>
-          <option value="flood">Flood season: May–Sep (n = 16)</option>
+          <option value="flood">Flood: May–Sep (n = 16)</option>
           <option value="winter">Winter: Dec–Feb (n = 13)</option>
-          <option value="shoulder">Shoulder: Mar–Apr, Oct–Nov (n = 10)</option>
+          <option value="autumn">Autumn: Oct–Nov (n = 8)</option>
+          <option value="spring">Spring: Mar–Apr (n = 2)</option>
         </select>
         <select id="severity-filter">
           <option value="all">All F_w severities</option>
@@ -164,10 +165,10 @@
       </p>
       <div class="fig-tabs" id="fig-tabs">
         <button class="fig-tab active" data-fig="Fig1">Fig. 1 Basin &amp; Regime</button>
-        <button class="fig-tab" data-fig="Fig2">Fig. 2 Tributary Masking</button>
-        <button class="fig-tab" data-fig="Fig3">Fig. 3 Chronology &amp; Seasons</button>
-        <button class="fig-tab" data-fig="Fig4">Fig. 4 Copula &amp; Grid &tau;</button>
-        <button class="fig-tab" data-fig="Fig5">Fig. 5 Sensitivity &amp; Datong</button>
+        <button class="fig-tab" data-fig="Fig2">Fig. 2 Chronology &amp; Seasons</button>
+        <button class="fig-tab" data-fig="Fig3">Fig. 3 Copula &amp; Grid &tau;</button>
+        <button class="fig-tab" data-fig="Fig4">Fig. 4 Sensitivity &amp; Datong</button>
+        <button class="fig-tab" data-fig="Fig5">Fig. 5 Tributary Masking</button>
         <button class="fig-tab" data-fig="Fig6">Fig. 6 Synoptic Circulation</button>
         <button class="fig-tab" data-fig="ESM_Fig1">Fig. S1 Wave Flux (200 hPa)</button>
       </div>
