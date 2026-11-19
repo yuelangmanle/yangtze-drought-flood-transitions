@@ -5,10 +5,11 @@ type: software
 authors:
   - family-names: "Deng"
     given-names: "Zijie"
+    orcid: "https://orcid.org/0009-0002-4824-9764"
     affiliation: "Jiangxi Provincial Key Laboratory of Water Resources Allocation and Efficient Utilization, Jiangxi University of Water Resources and Electric Power"
 license: MIT
 version: "2.0.0"
-date-released: "2026-11-18"
+date-released: "2026-11-19"
 repository-code: "https://github.com/yuelangmanle/yangtze-drought-flood-transitions"
 url: "https://yuelangmanle.github.io/yangtze-drought-flood-transitions/"
 keywords:
